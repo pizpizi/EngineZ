@@ -1,6 +1,6 @@
-[submodule "GLFW"]
-	path = GLFW
+[submodule "dependencies/glfw"]
+	path = dependencies/glfw
 	url = https://github.com/glfw/glfw.git
-[submodule "GLM"]
-	path = GLM
+[submodule "dependencies/glm"]
+	path = dependencies/glm
 	url = https://github.com/g-truc/glm.git
