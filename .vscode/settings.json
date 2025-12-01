@@ -1,4 +1,12 @@
 {
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "memory-view.trackDebuggers": [
+        {
+            "debugger": "lldb",
+            "memoryReadCommand": "memory read {address} {length}",
+            "pointerExpression": "{pointer}[{length}]"
+        }
+    ],
     "files.associations": {
         "ostream": "cpp",
         "algorithm": "cpp",
@@ -64,6 +72,11 @@
         "xmemory": "cpp",
         "xstring": "cpp",
         "xtr1common": "cpp",
-        "xutility": "cpp"
+        "xutility": "cpp",
+        "expected": "cpp",
+        "map": "cpp",
+        "set": "cpp",
+        "span": "cpp",
+        "xtree": "cpp"
     }
 }

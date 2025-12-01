@@ -11,7 +11,20 @@
         {
             "label": "Build and run",
             "type" : "shell",
-            "command": "cmake --build build; ./build/Debug/test.exe"
+            "group": "build",
+            "command": "cmake --build build; ./build/test.exe"
+        },
+        {
+            "label": "Build",
+            "type" : "shell",
+            "group": "build",
+            "command": "cmake --build build"
+        },
+        {
+            "label": "Clean Build and run",
+            "type" : "shell",
+            "group": "build",
+            "command": "cmake --build build --clean-first; ./build/test.exe"
         }
     ]
 }
