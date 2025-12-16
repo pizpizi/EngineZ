@@ -2,11 +2,17 @@
     "version": "0.2.0",
     "configurations": [
         {
-			"name": "Debug",
-			"type": "lldb",
-			"request": "launch",
-			"program": "${workspaceFolder}/build/test",
-			"preLaunchTask": "Build"
-		}
+            "name": "Debug",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/test",
+            "windows": {
+                "program": "${workspaceFolder}/build/test.exe"
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Build",
+            "stopOnEntry": false
+        }
     ]
 }

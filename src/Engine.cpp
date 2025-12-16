@@ -137,6 +137,7 @@ VkInstanceCreateInfo Engine::createInstanceInfo(VkApplicationInfo* appInfo){
     createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
     
     createInfo.enabledLayerCount = 0;
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
     if(DEBUG_ENABLED){
         result = checkLayerSupport();
         if(!result.success){
@@ -150,6 +151,9 @@ VkInstanceCreateInfo Engine::createInstanceInfo(VkApplicationInfo* appInfo){
 
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
+
+        populateDebugMessengerCreateInfo(debugCreateInfo);
+        createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
     }
     
     return createInfo;
@@ -165,8 +169,7 @@ void Engine::createInstance(){
         throw std::runtime_error("failed to create Vulkan instance");
     }
 }
-VkResult Engine::setupDebugMessenger(){
-    VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+void Engine::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo){
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 
     createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
@@ -178,6 +181,11 @@ VkResult Engine::setupDebugMessenger(){
                                 VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     createInfo.pfnUserCallback = debugCallback;
     createInfo.pUserData = nullptr;
+}
+VkResult Engine::setupDebugMessenger(){
+    VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+    populateDebugMessengerCreateInfo(createInfo);
+    
 
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(vkInstance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr) {

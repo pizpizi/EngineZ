@@ -23,6 +23,7 @@ private:
     void createInstance();
 
     VkResult setupDebugMessenger();
+    void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
 
     void cleanUp();
 
