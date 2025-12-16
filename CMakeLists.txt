@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 
-# set(CMAKE_MAKE_PROGRAM "${CMAKE_SOURCE_DIR}/tools/ninja")
+# if(WIN32)
+#     set(CMAKE_MAKE_PROGRAM "${CMAKE_SOURCE_DIR}/tools/ninja.exe")
+# endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_BUILD_TYPE)

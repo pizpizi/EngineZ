@@ -6,7 +6,7 @@
             "type": "shell",
             "group": "build",
             "windows": {
-                "command": "cmake --build build  --config Debug && build\\test.exe"
+                "command": "cmake --build build  --config Debug; build\\test.exe"
             },
             "linux": {
                 "command": "cmake --build build  --config Debug && ./build/test"
@@ -28,7 +28,7 @@
             "type": "shell",
             "group": "build",
             "windows": {
-                "command": "cmake --build build --clean-first  --config Debug && build\\test.exe"
+                "command": "cmake --build build --clean-first  --config Debug; build\\test.exe"
             },
             "linux": {
                 "command": "cmake --build build --clean-first  --config Debug && ./build/test"
