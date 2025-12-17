@@ -21,6 +21,8 @@ elseif(UNIX)
     set(CMAKE_RC_COMPILER "/usr/bin/windres") # or skip if not needed
 endif()
 
+add_compile_options(-Werror=return-type)
+
 project(Engine)
 
 set(CMAKE_CXX_STANDARD 20)

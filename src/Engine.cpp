@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <iostream>
 #include <cstring>
 #include <format>
@@ -6,6 +7,7 @@
 #include <vector>
 
 #include "Engine.hpp"
+#include "QueueFamilyIndecies.hpp"
 #include "Result.hpp"
 
 using std::cout, std::endl, std::vector;
@@ -152,14 +154,11 @@ VkInstanceCreateInfo Engine::createInstanceInfo(VkApplicationInfo* appInfo){
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
 
-        populateDebugMessengerCreateInfo(debugCreateInfo);
-        createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
+        // populateDebugMessengerCreateInfo(debugCreateInfo);
+        // createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
     }
     
     return createInfo;
-}
-void createInstance(){
-
 }
 void Engine::createInstance(){
     VkApplicationInfo appInfo = createAppInfo();
@@ -182,28 +181,125 @@ void Engine::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT
     createInfo.pfnUserCallback = debugCallback;
     createInfo.pUserData = nullptr;
 }
-VkResult Engine::setupDebugMessenger(){
+void Engine::setupDebugMessenger(){
     VkDebugUtilsMessengerCreateInfoEXT createInfo{};
     populateDebugMessengerCreateInfo(createInfo);
     
 
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(vkInstance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr) {
-        return func(vkInstance, &createInfo, nullptr, &debugMessenger);
+        if(func(vkInstance, &createInfo, nullptr, &debugMessenger)!=VK_SUCCESS){
+            throw std::runtime_error("Couldn't setup the debug messenger");
+        }
     } else {
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
+        throw std::runtime_error("Couldn't setup the debug messenger: VK_ERROR_EXTENSION_NOT_PRESENT");
     }
+}
+void Engine::pickPhysicalDevice(){
+    uint32_t physicalDeviceCount;
+    vkEnumeratePhysicalDevices(vkInstance, &physicalDeviceCount, nullptr);
+    if (physicalDeviceCount == 0) {
+        throw std::runtime_error("Failed to find GPUs with Vulkan support");
+    }
+
+    vector<VkPhysicalDevice> availableDevices = vector<VkPhysicalDevice>(physicalDeviceCount);
+    vkEnumeratePhysicalDevices(vkInstance, &physicalDeviceCount, availableDevices.data());
+ 
+    cout<<"Available physical devices|================"<<endl;
+    int maxScore = 0;
+    for(int i = 0 ; i < physicalDeviceCount; i++){
+        VkPhysicalDeviceProperties properties;
+        VkPhysicalDeviceMemoryProperties memoryProperties;
+        vkGetPhysicalDeviceProperties(availableDevices[i], &properties);
+        vkGetPhysicalDeviceMemoryProperties(availableDevices[i], &memoryProperties);
+
+        uint32_t queueFamilyCount;
+        vkGetPhysicalDeviceQueueFamilyProperties(availableDevices[i], &queueFamilyCount, nullptr);
+        vector<VkQueueFamilyProperties> families = vector<VkQueueFamilyProperties>(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(availableDevices[i], &queueFamilyCount, families.data());
+        VkDeviceSize totalVRAM = 0;
+
+        for (uint32_t i = 0; i < memoryProperties.memoryHeapCount; i++) {
+            VkMemoryHeap heap = memoryProperties.memoryHeaps[i];
+
+            if (heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+                totalVRAM += heap.size;
+            }
+        }
+
+        int score = 0;
+
+        cout<<std::format("    {}.{}\n        Id:{}\n        Memory: {}\n        Queue families:\n", i, properties.deviceName, properties.deviceID, totalVRAM);
+        for(int j = 0 ; j < families.size(); j++){
+            cout<<std::format("            {}.\n                Queue count: {}\n                Flag Bits: {}\n", j, families[i].queueCount, families[i].queueFlags);
+        }
+
+        QueueFamilyIndices queueFamilyIndices = QueueFamilyIndices(availableDevices[i]);
+        if(properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) score += 1;
+        if((queueFamilyIndices.graphicQueues.size() != 0) && (queueFamilyIndices.computeQueues.size() != 0)) score += 1;
+
+        if(score > maxScore){
+            maxScore = score;
+            this->physicalDevice = availableDevices[i];
+        }
+    }
+
+    if(maxScore != 2){
+        throw std::runtime_error("No Devices found with the minmum requirements");
+    }
+}
+void Engine::createLogicalDevice(){
+    VkDeviceCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
+    VkDeviceQueueCreateInfo queueCreateInfo{};
+    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    QueueFamilyIndices queueFamilyIndices = QueueFamilyIndices(physicalDevice);
+    queueCreateInfo.queueFamilyIndex = queueFamilyIndices.graphicQueues[0];
+    queueCreateInfo.queueCount = 1;
+
+    float queuePriority = 1.0;
+    queueCreateInfo.pQueuePriorities = &queuePriority;
+
+    VkPhysicalDeviceFeatures deviceFeatures{};
+
+
+    createInfo.pQueueCreateInfos = &queueCreateInfo;
+    createInfo.queueCreateInfoCount = 1;
+    createInfo.pEnabledFeatures = &deviceFeatures;
+
+    createInfo.enabledExtensionCount = 0;
+
+    if (DEBUG_ENABLED) {
+        createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+        createInfo.ppEnabledLayerNames = validationLayers.data();
+    } else {
+        createInfo.enabledLayerCount = 0;
+    }
+
+    if(vkCreateDevice(physicalDevice, &createInfo, nullptr, &logicalDevice) != VK_SUCCESS){
+        throw std::runtime_error("Failed to create a logical device");
+    }
+
+    vkGetDeviceQueue(logicalDevice, queueFamilyIndices.graphicQueues[0], 0, &graphicsQueue);
+}
+void Engine::createSurface(){
+    
 }
 void Engine::initVulkan(){
     createInstance();
     cout<<"Created Vulkan instance"<<endl;
 
-    if(DEBUG_ENABLED){
-        if(setupDebugMessenger() != VK_SUCCESS){
-            throw std::runtime_error("Couldn't setup the debug messenger");
-        }
-        cout<<"The debug messenger was setup"<<endl;
-    }
+    setupDebugMessenger();
+    cout<<"The debug messenger was setup"<<endl;
+
+    pickPhysicalDevice();
+    VkPhysicalDeviceProperties physicalDeviceProperties;
+    vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
+    cout<<"Chosen physical device: "<<physicalDeviceProperties.deviceName<<endl;
+
+    createLogicalDevice();
+    cout<<"Created the logical device"<<endl;
 }
 void Engine::cleanUp(){
     if(DEBUG_ENABLED){
@@ -212,7 +308,8 @@ void Engine::cleanUp(){
             func(vkInstance, debugMessenger, nullptr);
         }
     }
-
+    
+    vkDestroyDevice(logicalDevice, nullptr);
     vkDestroyInstance(vkInstance, nullptr);
 
     if(window != nullptr){
@@ -221,3 +318,14 @@ void Engine::cleanUp(){
 
     glfwTerminate();
 }
+
+VKAPI_ATTR VkBool32 VKAPI_CALL Engine::debugCallback( 
+        VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+        VkDebugUtilsMessageTypeFlagsEXT messageType,
+        const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+        void* pUserData) {
+
+        std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+
+        return VK_FALSE;
+    }
