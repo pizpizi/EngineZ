@@ -1,42 +1,52 @@
 #include "QueueFamilyIndecies.hpp"
+#include "VkExtendedQueueFlagBits.hpp"
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <map>
 #include <string>
 #include <vulkan/vulkan_core.h>
 
-static std::vector<VkQueueFlagBits> flagBits = {
-    VK_QUEUE_GRAPHICS_BIT,
-    VK_QUEUE_COMPUTE_BIT,
-    VK_QUEUE_TRANSFER_BIT,
-    VK_QUEUE_SPARSE_BINDING_BIT,
-    VK_QUEUE_PROTECTED_BIT,
-    VK_QUEUE_VIDEO_DECODE_BIT_KHR,
-    VK_QUEUE_VIDEO_ENCODE_BIT_KHR,
-    VK_QUEUE_OPTICAL_FLOW_BIT_NV
+static std::vector<VkExtendedQueueFlagBits> flagBits = {
+    GRAPHICS,
+    COMPUTE,
+    TRANSFER,
+    SPARSE_BINDING,
+    PROTECTED,
+    VIDEO_DECODE,
+    VIDEO_ENCODE,
+    OPTICAL_FLOW,
+    PRESENT
 };
 
-static const std::map<VkQueueFlagBits, std::string> flagNames = {
-    {VK_QUEUE_GRAPHICS_BIT, "Graphics"},
-    {VK_QUEUE_COMPUTE_BIT, "Compute"},
-    {VK_QUEUE_TRANSFER_BIT, "Transfer"},
-    {VK_QUEUE_SPARSE_BINDING_BIT, "Sparse Binding"},
-    {VK_QUEUE_PROTECTED_BIT, "Protected"},
-    {VK_QUEUE_VIDEO_DECODE_BIT_KHR, "Video Decode"},
-    {VK_QUEUE_VIDEO_ENCODE_BIT_KHR, "Video Encode"},
-    {VK_QUEUE_OPTICAL_FLOW_BIT_NV, "Optical Flow"}
+static const std::map<VkExtendedQueueFlagBits, std::string> flagNames = {
+    {GRAPHICS, "Graphics"},
+    {COMPUTE, "Compute"},
+    {TRANSFER, "Transfer"},
+    {SPARSE_BINDING, "Sparse Binding"},
+    {PROTECTED, "Protected"},
+    {VIDEO_DECODE, "Video Decode"},
+    {VIDEO_ENCODE, "Video Encode"},
+    {OPTICAL_FLOW, "Optical Flow"},
+    {PRESENT, "Present"}
 };
 
-QueueFamilyIndices::QueueFamilyIndices(VkPhysicalDevice device){
+QueueFamilyIndices::QueueFamilyIndices(VkPhysicalDevice device, VkSurfaceKHR* surface){
     uint32_t queueFamilyCount;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
     std::vector<VkQueueFamilyProperties> families = std::vector<VkQueueFamilyProperties>(queueFamilyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, families.data());
 
-    for(int i = 0; i < families.size(); i++){
+    for(uint32_t i = 0; i < families.size(); i++){
         for(auto flagBit: flagBits){
             if(families[i].queueFlags & flagBit){
                 map[flagBit].push_back(i);
             }
+        }
+        if(surface != NULL){
+            VkBool32 presentSupport = false;
+            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, *surface, &presentSupport);
+            if(presentSupport) map[PRESENT].push_back(i);
         }
     }
 }

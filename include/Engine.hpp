@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SwapchainDetails.hpp"
 #include <vector>
 
 #if defined(_WIN32)
@@ -23,9 +24,10 @@ private:
     void initWindow();
     void initVulkan();
     
-    std::vector<const char*> getRequiredExtentions();
+    std::vector<const char*> getRequiredGlfwExtensions();
     Result checkLayerSupport();
-    Result checkExtentionSupport(std::vector<const char*> requredExtentions);
+    Result checkExtensionSupport(std::vector<const char*> requredExtensions);
+    Result checkDeviceExtensionSupport(std::vector<const char*> requredExtensions, VkPhysicalDevice& device);
     
     VkInstanceCreateInfo createInstanceInfo(VkApplicationInfo* appInfo);
     VkApplicationInfo createAppInfo();
@@ -35,8 +37,16 @@ private:
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
     void createSurface();
 
+    void createSwapchain();
+    VkSurfaceFormatKHR chooseSwapchainFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
+    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
+    VkExtent2D chooseSwapExtent(const std::vector<VkPresentModeKHR>& availablePresentModes);
+
+    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
+
     void pickPhysicalDevice();
     void createLogicalDevice();
+
 
     void cleanUp();
 
@@ -44,12 +54,21 @@ private:
     VkInstance vkInstance;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice logicalDevice;
+    
     VkQueue graphicsQueue;
+    VkQueue computeQueue;
+    VkQueue presentQueue;
     
     VkSurfaceKHR surface;
     
     const std::vector<const char*> validationLayers = {
         "VK_LAYER_KHRONOS_validation"
+    };
+    std::vector<const char*> requiredDeviceExtensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    };
+    std::vector<const char*> requiredExtensions = {
+        
     };
     VkDebugUtilsMessengerEXT debugMessenger;
 
