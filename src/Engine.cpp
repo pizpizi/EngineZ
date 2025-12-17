@@ -5,6 +5,7 @@
 #include <ostream>
 #include <stdexcept>
 #include <vector>
+#include <vulkan/vulkan_core.h>
 
 #include "Engine.hpp"
 #include "QueueFamilyIndecies.hpp"
@@ -154,8 +155,8 @@ VkInstanceCreateInfo Engine::createInstanceInfo(VkApplicationInfo* appInfo){
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
 
-        // populateDebugMessengerCreateInfo(debugCreateInfo);
-        // createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
+        populateDebugMessengerCreateInfo(debugCreateInfo);
+        createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
     }
     
     return createInfo;
@@ -231,12 +232,13 @@ void Engine::pickPhysicalDevice(){
 
         cout<<std::format("    {}.{}\n        Id:{}\n        Memory: {}\n        Queue families:\n", i, properties.deviceName, properties.deviceID, totalVRAM);
         for(int j = 0 ; j < families.size(); j++){
-            cout<<std::format("            {}.\n                Queue count: {}\n                Flag Bits: {}\n", j, families[i].queueCount, families[i].queueFlags);
+            cout<<std::format("            {}.\n                Queue count: {}\n                Flag Bits: {}\n", j, families[j].queueCount, families[j].queueFlags);
         }
 
         QueueFamilyIndices queueFamilyIndices = QueueFamilyIndices(availableDevices[i]);
+        queueFamilyIndices.print(1);
         if(properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) score += 1;
-        if((queueFamilyIndices.graphicQueues.size() != 0) && (queueFamilyIndices.computeQueues.size() != 0)) score += 1;
+        if((queueFamilyIndices[VK_QUEUE_COMPUTE_BIT].size() != 0) && (queueFamilyIndices[VK_QUEUE_GRAPHICS_BIT].size() != 0)) score += 1;
 
         if(score > maxScore){
             maxScore = score;
@@ -255,7 +257,7 @@ void Engine::createLogicalDevice(){
     VkDeviceQueueCreateInfo queueCreateInfo{};
     queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     QueueFamilyIndices queueFamilyIndices = QueueFamilyIndices(physicalDevice);
-    queueCreateInfo.queueFamilyIndex = queueFamilyIndices.graphicQueues[0];
+    queueCreateInfo.queueFamilyIndex = queueFamilyIndices[VK_QUEUE_COMPUTE_BIT][0];
     queueCreateInfo.queueCount = 1;
 
     float queuePriority = 1.0;
@@ -281,7 +283,7 @@ void Engine::createLogicalDevice(){
         throw std::runtime_error("Failed to create a logical device");
     }
 
-    vkGetDeviceQueue(logicalDevice, queueFamilyIndices.graphicQueues[0], 0, &graphicsQueue);
+    vkGetDeviceQueue(logicalDevice, queueFamilyIndices[VK_QUEUE_GRAPHICS_BIT][0], 0, &graphicsQueue);
 }
 void Engine::createSurface(){
     
