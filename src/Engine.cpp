@@ -358,9 +358,9 @@ VkPresentModeKHR Engine::chooseSwapPresentMode(const std::vector<VkPresentModeKH
 
     return VK_PRESENT_MODE_FIFO_KHR;
 }
-VkExtent2D Engine::chooseSwapExtent(const std::vector<VkPresentModeKHR>& availablePresentModes){
+// VkExtent2D Engine::chooseSwapExtent(const std::vector<VkPresentModeKHR>& availablePresentModes){
     
-}
+// }
 void Engine::createSwapchain(){
     
 }
