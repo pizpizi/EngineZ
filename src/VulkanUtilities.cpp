@@ -1,11 +1,13 @@
-#include "QueueFamilyIndecies.hpp"
-#include "VkExtendedQueueFlagBits.hpp"
+#include "VulkanUtilities.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <map>
 #include <string>
 #include <vulkan/vulkan_core.h>
+
+
+using namespace VulkanUtilities;
 
 static std::vector<VkExtendedQueueFlagBits> flagBits = {
     GRAPHICS,
