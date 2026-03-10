@@ -2,14 +2,11 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Build and run",
+            "label": "Configure Build Dir",
             "type": "shell",
             "group": "build",
-            "windows": {
-                "command": "cmake --build build  --config Debug; if ($LASTEXITCODE -eq 0) { build\\test.exe } else {Write-Host \"ERROR: build failed\" -ForegroundColor Red}"
-            },
             "linux": {
-                "command": "cmake --build build  --config Debug && ./build/test"
+                "command": "rm -rf build && cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DENGINEZ_BUILD_EXAMPLES=ON"
             }
         },
         {
@@ -17,21 +14,19 @@
             "type": "shell",
             "group": "build",
             "windows": {
-                "command": "cmake --build build  --config Debug"
+                "command": "cmake --build build  --config Debug -DCMAKE_EXPORT_COMPILE_COMMANDS; if ($LASTEXITCODE -eq 0) { build\\test.exe } else {Write-Host \"ERROR: build failed\" -ForegroundColor Red}"
             },
             "linux": {
                 "command": "cmake --build build --config Debug"
             }
         },
         {
-            "label": "Clean Build and run",
+            "label": "Run",
             "type": "shell",
-            "group": "build",
-            "windows": {
-                "command": "cmake --build build --clean-first  --config Debug; build\\test.exe"
-            },
+            "group": "test",
+            "dependsOn": "Build",
             "linux": {
-                "command": "cmake --build build --clean-first  --config Debug && ./build/test"
+                "command": "./build/examples/main"
             }
         }
     ]

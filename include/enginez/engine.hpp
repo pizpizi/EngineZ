@@ -1,22 +1,16 @@
 #pragma once
 
-#include "VulkanUtilities.hpp"
+#include "vulkan_utilities.hpp"
 #include <cstdint>
 #include <map>
 #include <vector>
-
-#if defined(_WIN32)
-    #define VK_USE_PLATFORM_WIN32_KHR
-    #define GLFW_EXPOSE_NATIVE_WIN32
-#elif defined(linux)
-    #define VK_USE_PLATFORM_XLIB_KHR
-    #define GLFW_EXPOSE_NATIVE_X11
-#endif
+#include <vulkan/vulkan_core.h>
+#include "logz/logger.hpp"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "Result.hpp"
+#include "result.hpp"
 
 using namespace VulkanUtilities;
 
@@ -36,7 +30,13 @@ private:
     void createPhysicalDevice();
     void setupDebugMessenger();
     void createGraphicsPipeLine();
+    void createRenderPass();
+    void createFramebuffers();
+    void createCommandBuffers();
+    void recordCommandBuffer();
+    void createSynchronization();
 
+    void draw();
     // --- Validation Functions
     Result checkLayerSupport();
     Result checkExtensionSupport(std::vector<const char*> requredExtensions);
@@ -70,6 +70,16 @@ private:
     VkInstance vkInstance;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice logicalDevice;
+    VkExtent2D swapchainExtent;
+    VkFormat swapchainFormat;
+    VkPipelineLayout pipelineLayout;
+    VkRenderPass renderPass;
+    VkPipeline graphicsPipeline;
+
+    uint32_t currentFrame = 0;
+
+    std::vector<VkSemaphore> imageAcquireSemaphores, renderSemaphores;
+    std::vector<VkFence> renderFences;
     
     // --- --- Queues
     VkQueue graphicsQueue;
@@ -83,6 +93,9 @@ private:
     VkSurfaceKHR surface;
     VkSwapchainKHR swapchain;
     std::vector<ImageViewPair> swapchainImages;
+    std::vector<VkFramebuffer> framebuffers;
+    std::vector<VkCommandBuffer> commandBuffers;
+    VkCommandPool commandPool;
     
     const std::vector<const char*> validationLayers = {
         "VK_LAYER_KHRONOS_validation"
@@ -100,8 +113,6 @@ private:
     };
     VkDebugUtilsMessengerEXT debugMessenger;
 
-    VkExtent2D swapchainExtent;
-    VkFormat swapchainFormat;
 
     const uint32_t WIDTH=800, HEIGHT=600;
     const bool DEBUG_ENABLED = true;
