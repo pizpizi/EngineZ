@@ -5,10 +5,7 @@
             "name": "Debug",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/build/test",
-            "windows": {
-                "program": "${workspaceFolder}/build/test.exe"
-            },
+            "program": "${workspaceFolder}/build/examples/main",
             "args": [],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "Build",

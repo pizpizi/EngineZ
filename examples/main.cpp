@@ -1,11 +1,23 @@
-#include <cstddef>
-#include <cstdint>
-#include <cstdio>
-#include<iostream>
 #include"enginez/engine.hpp"
+#include "logz/logger.hpp"
+#include <exception>
+// #include "enginez/graphics/graphics_backend.hpp"
+
+
 
 int main(){
-    Engine engine = Engine();
-    
-    engine.run();
+    enginez::EngineCreateInfo createInfo = {
+        enginez::graphics::VULKAN
+    };
+    enginez::Engine engine(createInfo);
+    engine.init();
+    auto window = engine.graphicsBackend->createWindow("Test window", 600, 600);
+    auto window2 = engine.graphicsBackend->createWindow("Test window2", 100, 600);
+
+
+    engine.loop();
+
+    engine.cleanUp();
+
+    // engine.logger.info("asd");
 }

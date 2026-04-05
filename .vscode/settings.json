@@ -7,7 +7,6 @@
             "pointerExpression": "{pointer}[{length}]"
         }
     ],
-    "clangd.arguments": [],
     "files.associations": {
         "ostream": "cpp",
         "algorithm": "cpp",

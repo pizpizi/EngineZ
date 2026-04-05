@@ -6,19 +6,35 @@
             "type": "shell",
             "group": "build",
             "linux": {
-                "command": "rm -rf build && cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DENGINEZ_BUILD_EXAMPLES=ON"
-            }
+                "command": "rm -rf build && cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Debug -DENGINEZ_BUILD_EXAMPLES=ON"
+            },
+            "presentation": {
+                "echo": false,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
         },
         {
             "label": "Build",
             "type": "shell",
             "group": "build",
             "windows": {
-                "command": "cmake --build build  --config Debug -DCMAKE_EXPORT_COMPILE_COMMANDS; if ($LASTEXITCODE -eq 0) { build\\test.exe } else {Write-Host \"ERROR: build failed\" -ForegroundColor Red}"
+                "command": " cmake --build build  --config Debug -DCMAKE_EXPORT_COMPILE_COMMANDS; if ($LASTEXITCODE -eq 0) { build\\test.exe } else {Write-Host \"ERROR: build failed\" -ForegroundColor Red}"
             },
             "linux": {
-                "command": "cmake --build build --config Debug"
-            }
+                "command": "cd dependencies/logz/ && git pull && cd ../.. && cmake --build build --config Debug"
+            },
+            "presentation": {
+                "echo": false,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
         },
         {
             "label": "Run",
@@ -28,6 +44,22 @@
             "linux": {
                 "command": "./build/examples/main"
             }
+        },
+        {
+            "type": "log-panel-wrapper",
+            "label": "Run Wrapped",
+            "unixCommand": "./build/examples/main",
+            "dependsOn": "Build",
+            "isBackground": true,
+            "presentation": {
+                "echo": false,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": []
         }
     ]
 }
