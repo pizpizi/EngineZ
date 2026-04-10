@@ -1,8 +1,8 @@
-[00:00:000:239] [INFO]  [EnginZ] setup the main logger
-[00:00:000:435] [INFO]  [Vulkan] vulkan logger setup.
-[00:00:010:427] [INFO]  [Vulkan] initialized glfw
-[00:00:010:679] [INFO]  [Vulkan] Api version: 1.3.275
-[00:00:033:416] [DEBUG] [Vulkan] available instance extensions :
+[00:00:000:304] [INFO]  [EnginZ] setup the main logger
+[00:00:000:519] [INFO]  [Vulkan] vulkan logger setup.
+[00:00:005:748] [INFO]  [Vulkan] initialized glfw
+[00:00:005:906] [INFO]  [Vulkan] Api version: 1.3.275
+[00:00:026:258] [DEBUG] [Vulkan] available instance extensions :
 
 VK_KHR_device_group_creation: 1
 VK_KHR_display: 23
@@ -28,53 +28,205 @@ VK_EXT_surface_maintenance1: 1
 VK_EXT_swapchain_colorspace: 5
 VK_KHR_portability_enumeration: 1
 VK_LUNARG_direct_driver_loading: 1
-[00:00:033:422] [DEBUG] [Vulkan] available instance layers :
+[00:00:026:263] [DEBUG] [Vulkan] available instance layers :
 
 VK_LAYER_NV_optimus: NVIDIA Optimus layer
 VK_LAYER_MESA_device_select: Linux device selection layer
 VK_LAYER_INTEL_nullhw: INTEL NULL HW
 VK_LAYER_KHRONOS_validation: Khronos Validation Layer
 VK_LAYER_MESA_overlay: Mesa Overlay layer
-[00:00:033:423] [DEBUG] [Vulkan] required glfw extensions :
+[00:00:026:265] [DEBUG] [Vulkan] required glfw extensions :
 
 VK_KHR_surface
 VK_KHR_xcb_surface
-[00:00:033:708] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_asahi.so
-[00:00:033:715] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_virtio.so
-[00:00:033:722] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_intel.so
-[00:00:033:727] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_gfxstream.so
-[00:00:033:733] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_nouveau.so
-[00:00:033:738] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_radeon.so
-[00:00:033:744] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_intel_hasvk.so
-[00:00:033:750] [INFO]  [Validation Layer] Searching for ICD drivers named libGLX_nvidia.so.0
-[00:00:033:757] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_lvp.so
-[00:00:063:041] [INFO]  [Validation Layer] Loading layer library libVkLayer_khronos_validation.so
-[00:00:063:156] [INFO]  [Validation Layer] Loading layer library libVkLayer_MESA_device_select.so
-[00:00:065:282] [INFO]  [Validation Layer] terminator_CreateInstance: ICD "libvulkan_gfxstream.so" vkEnumerateInstanceVersion returned error. The ICD will be treated as a 1.0 ICD
-[00:00:075:777] [INFO]  [Validation Layer] Copying old device 0 into new device 0
-[00:00:075:778] [INFO]  [Validation Layer] Copying old device 1 into new device 1
-[00:00:075:779] [INFO]  [Validation Layer] Copying old device 2 into new device 2
-[00:00:075:839] [INFO]  [Vulkan] created the vulkan instance
-[00:00:075:889] [INFO]  [Vulkan] setup the debug messenger
-[00:00:088:985] [INFO]  [Vulkan] created window
-[00:00:097:884] [INFO]  [Vulkan] created window
-[00:01:097:895] [INFO]  [EnginZ] 1351280 frames -> frame time: 740ns
-[00:02:097:910] [INFO]  [EnginZ] 1398555 frames -> frame time: 715ns
-[00:03:097:917] [INFO]  [EnginZ] 1462548 frames -> frame time: 683ns
-[00:04:097:924] [INFO]  [EnginZ] 1478374 frames -> frame time: 676ns
-[00:05:097:931] [INFO]  [EnginZ] 1471559 frames -> frame time: 679ns
-[00:06:097:938] [INFO]  [EnginZ] 1469503 frames -> frame time: 680ns
-[00:07:097:945] [INFO]  [EnginZ] 1467875 frames -> frame time: 681ns
-[00:08:097:954] [INFO]  [EnginZ] 1465240 frames -> frame time: 682ns
-[00:09:097:962] [INFO]  [EnginZ] 1485210 frames -> frame time: 673ns
-[00:10:097:973] [INFO]  [EnginZ] 935867 frames -> frame time: 1068ns
-[00:11:097:984] [INFO]  [EnginZ] 889830 frames -> frame time: 1123ns
-[00:11:594:323] [DEBUG] [Test window2] window Test window2 marked as closed
-[00:11:594:716] [INFO]  [Test window2] cleaned up window Test window2
-[00:12:097:997] [INFO]  [EnginZ] 907429 frames -> frame time: 1102ns
-[00:12:456:480] [DEBUG] [Test window] window Test window marked as closed
-[00:12:456:721] [INFO]  [Test window] cleaned up window Test window
-[00:12:457:351] [INFO]  [Validation Layer] Unloading layer library libVkLayer_MESA_device_select.so
-[00:12:463:234] [INFO]  [Validation Layer] Unloading layer library libVkLayer_khronos_validation.so
-[00:12:475:922] [INFO]  [Vulkan] cleaned up vulkan graphics backend
-[00:12:475:924] [INFO]  [EnginZ] cleaned up the engine
+[00:00:026:602] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_asahi.so
+[00:00:026:612] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_virtio.so
+[00:00:026:619] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_intel.so
+[00:00:026:624] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_gfxstream.so
+[00:00:026:630] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_nouveau.so
+[00:00:026:637] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_radeon.so
+[00:00:026:642] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_intel_hasvk.so
+[00:00:026:649] [INFO]  [Validation Layer] Searching for ICD drivers named libGLX_nvidia.so.0
+[00:00:026:657] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_lvp.so
+[00:00:054:985] [INFO]  [Validation Layer] Loading layer library libVkLayer_khronos_validation.so
+[00:00:055:106] [INFO]  [Validation Layer] Loading layer library libVkLayer_MESA_device_select.so
+[00:00:057:463] [INFO]  [Validation Layer] terminator_CreateInstance: ICD "libvulkan_gfxstream.so" vkEnumerateInstanceVersion returned error. The ICD will be treated as a 1.0 ICD
+[00:00:067:013] [INFO]  [Validation Layer] Copying old device 0 into new device 0
+[00:00:067:015] [INFO]  [Validation Layer] Copying old device 1 into new device 1
+[00:00:067:015] [INFO]  [Validation Layer] Copying old device 2 into new device 2
+[00:00:067:116] [INFO]  [Validation Layer] Copying old device 0 into new device 0
+[00:00:067:117] [INFO]  [Validation Layer] Copying old device 1 into new device 1
+[00:00:067:117] [INFO]  [Validation Layer] Copying old device 2 into new device 2
+[00:00:067:132] [INFO]  [Validation Layer] Copying old device 0 into new device 0
+[00:00:067:132] [INFO]  [Validation Layer] Copying old device 1 into new device 1
+[00:00:067:133] [INFO]  [Validation Layer] Copying old device 2 into new device 2
+[00:00:067:461] [INFO]  [Validation Layer] Copying old device 0 into new device 0
+[00:00:067:462] [INFO]  [Validation Layer] Copying old device 1 into new device 1
+[00:00:067:463] [INFO]  [Validation Layer] Copying old device 2 into new device 2
+[00:00:067:477] [INFO]  [Validation Layer] Copying old device 0 into new device 0
+[00:00:067:477] [INFO]  [Validation Layer] Copying old device 1 into new device 1
+[00:00:067:478] [INFO]  [Validation Layer] Copying old device 2 into new device 2
+[00:00:067:704] [INFO]  [Vulkan] devices: 
+0. Intel(R) Graphics (RPL-S) :
+	type: integrated gpu
+	score: 0
+	driver name: Intel open-source Mesa driver
+	node mask: 0
+	memory:
+		heaps:
+			0.
+				size: 12273798144
+		types:
+			0.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+			1.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+			2.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+					HOST CACHED BIT
+			3.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+					PROTECTED BIT
+			4.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+			5.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+			6.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+					HOST CACHED BIT
+	queue families:
+		0.
+			queue count: 1
+			capabilities:
+				graphics
+				compute
+				transfer
+				sparse binding
+1. NVIDIA GeForce RTX 4060 Laptop GPU :
+	type: discrete gpu
+	score: 1
+	driver name: NVIDIA
+	node mask: 1
+	memory:
+		heaps:
+			0.
+				size: 8585740288
+			1.
+				size: 12273798144
+		types:
+			0.
+				heap: 1
+				properties:
+			1.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+			2.
+				heap: 1
+				properties:
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+			3.
+				heap: 1
+				properties:
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+					HOST CACHED BIT
+			4.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+	queue families:
+		0.
+			queue count: 16
+			capabilities:
+				graphics
+				compute
+				transfer
+				sparse binding
+		1.
+			queue count: 2
+			capabilities:
+				transfer
+				sparse binding
+		2.
+			queue count: 8
+			capabilities:
+				compute
+				transfer
+				sparse binding
+		3.
+			queue count: 1
+			capabilities:
+				transfer
+				video decode
+				sparse binding
+		4.
+			queue count: 1
+			capabilities:
+				transfer
+				sparse binding
+				optical flow
+2. llvmpipe (LLVM 20.1.2, 256 bits) :
+	type: cpu
+	score: 1
+	driver name: llvmpipe
+	node mask: 0
+	memory:
+		heaps:
+			0.
+				size: 16365064192
+		types:
+			0.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+					HOST CACHED BIT
+	queue families:
+		0.
+			queue count: 1
+			capabilities:
+				graphics
+				compute
+				transfer
+				sparse binding
+
+[00:00:067:707] [INFO]  [Vulkan] chose NVIDIA GeForce RTX 4060 Laptop GPU as the device
+[00:00:088:294] [DEBUG] [Vulkan] compute queue handle: 0x608286d03610
+[00:01:108:511] [INFO]  [EnginZ] 935920 frames -> frame time: 1068ns
+[00:02:108:519] [INFO]  [EnginZ] 1397565 frames -> frame time: 715ns
+[00:02:603:943] [DEBUG] [Test window] window Test window marked as closed
+[00:02:604:257] [INFO]  [Test window] cleaned up window Test window
+[00:03:108:530] [INFO]  [EnginZ] 1034144 frames -> frame time: 966ns
+[00:03:711:307] [DEBUG] [Test window2] window Test window2 marked as closed
+[00:03:711:526] [INFO]  [Test window2] cleaned up window Test window2
+[00:03:719:036] [INFO]  [Validation Layer] Unloading layer library libVkLayer_MESA_device_select.so
+[00:03:724:246] [INFO]  [Validation Layer] Unloading layer library libVkLayer_khronos_validation.so
+[00:03:735:016] [INFO]  [Vulkan] cleaned up vulkan graphics backend
+[00:03:735:018] [INFO]  [EnginZ] cleaned up the engine

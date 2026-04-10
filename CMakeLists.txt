@@ -61,7 +61,7 @@ add_subdirectory("${CMAKE_SOURCE_DIR}/dependencies/glfw")
 add_subdirectory("${CMAKE_SOURCE_DIR}/dependencies/logz")
 find_package(Vulkan REQUIRED)
 
-add_library(enginez src/engine.cpp src/vulkan/vulkan_utilities.cpp src/vulkan/vulkan_backend.cpp src/vulkan/vulkan_window)
+add_library(enginez src/engine.cpp src/vulkan/vulkan_utilities.cpp src/vulkan/vulkan_backend.cpp src/vulkan/vulkan_buffer.cpp src/vulkan/vulkan_window)
 
 target_include_directories(enginez
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include

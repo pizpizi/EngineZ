@@ -8,7 +8,6 @@ namespace enginez {
     struct EngineCreateInfo {
         graphics::GraphicsBackendType graphicsBackendType;
     };
-
     class Engine {
       public:
         logz::DefaultLogger& logger = logz::createDefaultLogger(logz::SINCE_PROGRAM_START, "EnginZ");
