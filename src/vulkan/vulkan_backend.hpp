@@ -1,6 +1,10 @@
 #pragma once
 #include "enginez/graphics/graphics_backend.hpp"
 #include "logz/logger.hpp"
+#include "non_owning_object_registry.hpp"
+#include "vulkan/vulkan_buffer.hpp"
+#include "vulkan/vulkan_memory_block.hpp"
+#include "vulkan/vulkan_shader.hpp"
 #include <cstdint>
 #include <vulkan/vulkan_core.h>
 
@@ -16,13 +20,31 @@ namespace enginez::graphics {
         VkPhysicalDeviceProperties properties;
         VkPhysicalDeviceMemoryProperties memoryProperties;
     };
-    class VulkanBackend : public GraphicsBackend {
+    class VulkanBackend final : public GraphicsBackend {
       public:
         void init() override;
         void cleanUp() override;
 
         EnginezWindow* createWindow(std::string title, int width, int height) override;
-        Buffer* createBuffer(size_t size) override;
+
+        // --------- memory blocks ---------- //
+        MemoryBlockId allocateMemory(size_t size) override;
+        void downloadFromMemory(MemoryBlockId srcId, void* dst, size_t size, size_t offset) override;
+        void uploadToMemory(MemoryBlockId dstId, void* src, size_t size, size_t offset) override;
+        void cleanUpMemoryBlock(MemoryBlockId memoryBlock) override;
+        // ---------------------------------- //
+
+        // ------------- shaders ------------ //
+        ShaderId createShader(const char* filePath) override;
+        void cleanUpShader(ShaderId shader) override;
+        // ---------------------------------- //
+
+        // ------------- buffers ------------ //
+        BufferId createBuffer(size_t size, BufferType type, MemoryBlockId boundMemoryId, size_t offset) override;
+        void cleanUpBuffer(BufferId id) override;
+        // ---------------------------------- //
+
+        PipelineHandle createComputePipeline(ShaderId computeShader) override;
 
       private:
         logz::DefaultLogger& logger = logz::createDefaultLogger(logz::SINCE_PROGRAM_START, "Vulkan");
@@ -30,6 +52,10 @@ namespace enginez::graphics {
 
         std::vector<const char*> requiredDeviceExtensions = {};
         std::map<VkQueueFlagBits, uint8_t> requiredQueues = {{VK_QUEUE_COMPUTE_BIT, 1}};
+
+        ObjectRegistry<VulkanMemoryBlock, MemoryBlockId> memoryBlocksRegistery;
+        ObjectRegistry<VulkanShader, ShaderId> shadersRegistry;
+        ObjectRegistry<VulkanBuffer, BufferId> bufferRegistry;
 
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;

@@ -1,9 +1,12 @@
 #include "vulkan_backend.hpp"
 #include "GLFW/glfw3.h"
-#include "enginez/graphics/buffer.hpp"
 #include "enginez/graphics/enginez_window.hpp"
+#include "enginez/graphics/graphics_backend.hpp"
 #include "logz/logger.hpp"
+#include "utilities.hpp"
 #include "vulkan/vulkan_buffer.hpp"
+#include "vulkan/vulkan_memory_block.hpp"
+#include "vulkan/vulkan_shader.hpp"
 #include "vulkan/vulkan_window.hpp"
 #include "vulkan_utilities.hpp"
 #include <cstddef>
@@ -58,7 +61,7 @@ void VulkanBackend::setupInstance() {
     VkInstanceCreateInfo instanceCreateInfo{};
     VkApplicationInfo appCreateInfo{};
 
-    // ------------- data ------------ //
+    // ------------------------- data ------------------------ //
     vector<const char*> requiredInstanceExtensions = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
     vector<const char*> requiredInstanceLayers = {"VK_LAYER_KHRONOS_validation"};
 
@@ -78,9 +81,9 @@ void VulkanBackend::setupInstance() {
     vkEnumerateInstanceLayerProperties(&availableLayersCount, nullptr);
     availableLayers.resize(availableLayersCount);
     vkEnumerateInstanceLayerProperties(&availableLayersCount, availableLayers.data());
-    // ------------------------------- //
+    // ------------------------------------------------------- //
 
-    // ------------------------ logs ------------------------ //
+    // ------------------------ logs ------------------------- //
     {
         stringstream log;
         log << "available instance extensions :\n";
@@ -102,9 +105,9 @@ void VulkanBackend::setupInstance() {
         }
         logger.debug(log.str());
     }
-    // ------------------------------------------------------ //
+    // ------------------------------------------------------- //
 
-    // ---------- validation --------- //
+    // ---------------------- validation --------------------- //
     for (auto const& reqExt : requiredInstanceExtensions) {
         bool found = false;
         for (auto const& ext : availableExtensions) {
@@ -117,9 +120,9 @@ void VulkanBackend::setupInstance() {
             throw runtime_error(format("extension {} is not available", reqExt));
         }
     }
-    // ------------------------------- //
+    // ------------------------------------------------------- //
 
-    // ---------- app info ----------- //
+    // ---------------------- app info ----------------------- //
     appCreateInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appCreateInfo.apiVersion = version;
     appCreateInfo.engineVersion = 1;
@@ -128,7 +131,7 @@ void VulkanBackend::setupInstance() {
     appCreateInfo.pEngineName = "EngineZ";
     // ------------------------------- //
 
-    // ------- debug messenger ------- //
+    // ------------------- debug messenger ------------------- //
     VkDebugUtilsMessengerCreateInfoEXT messengerCreateInfo{};
     messengerCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     messengerCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
@@ -137,9 +140,9 @@ void VulkanBackend::setupInstance() {
                                       VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     messengerCreateInfo.pUserData = this;
     messengerCreateInfo.pfnUserCallback = VulkanBackend::baseDebugCallback;
-    // ------------------------------- //
+    // ------------------------------------------------------- //
 
-    // -------- instance info -------- //
+    // -------------------- instance info -------------------- //
     instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceCreateInfo.pApplicationInfo = &appCreateInfo;
     instanceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(requiredInstanceExtensions.size());
@@ -147,7 +150,7 @@ void VulkanBackend::setupInstance() {
     instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(requiredInstanceLayers.size());
     instanceCreateInfo.ppEnabledLayerNames = requiredInstanceLayers.data();
     instanceCreateInfo.pNext = &messengerCreateInfo;
-    // ------------------------------- //
+    // ------------------------------------------------------- //
 
     if (vkCreateInstance(&instanceCreateInfo, nullptr, &instance) != VK_SUCCESS) {
         throw runtime_error("failed to craete a vulkan instance");
@@ -393,15 +396,21 @@ void VulkanBackend::cleanUp() {
     for (const auto& window : windows) {
         window->cleanUp();
     }
-    for (const auto& buffer : buffers) {
-        buffer->cleanUp();
+    for (const auto& buffer : memoryBlocksRegistery.getData()) {
+        vkFreeMemory(logicalDevice.device, buffer.second->handle, nullptr);
     }
+    for (const auto& buffer : bufferRegistry.getData()) {
+        vkDestroyBuffer(logicalDevice.device, buffer.second->handle, nullptr);
+    }
+    for (const auto& shader : shadersRegistry.getData()) {
+        vkDestroyShaderModule(logicalDevice.device, shader.second->handle, nullptr);
+    }
+    vkDestroyDevice(logicalDevice.device, nullptr);
 
     PFN_vkDestroyDebugUtilsMessengerEXT messengerDestroyFunc =
         (PFN_vkDestroyDebugUtilsMessengerEXT)(vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
     messengerDestroyFunc(instance, debugMessenger, nullptr);
 
-    vkDestroyDevice(logicalDevice.device, nullptr);
     vkDestroyInstance(instance, nullptr);
 
     glfwTerminate();
@@ -443,10 +452,11 @@ VkBool32 VulkanBackend::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT mes
         validationLayerLogger.info(pCallbackData->pMessage);
         break;
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-        validationLayerLogger.warning(pCallbackData->pMessage);
+        validationLayerLogger.error(pCallbackData->pMessage);
         break;
     default:
         validationLayerLogger.info(pCallbackData->pMessage);
+        break;
     }
 
     return VK_FALSE;
@@ -464,14 +474,185 @@ int32_t VulkanBackend::getSuitableMemoryType(LogicalDevice& logicalDevice, VkMem
     return -1;
 }
 
-Buffer* VulkanBackend::createBuffer(size_t size) {
-    auto typeIndex = getSuitableMemoryType(logicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+//    +----------------------------------------------------+
+//    |                  memory allocation                 |
+//    +----------------------------------------------------+
+
+MemoryBlockId VulkanBackend::allocateMemory(size_t size) {
+    VkMemoryPropertyFlags requiredProperties =
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    auto typeIndex = getSuitableMemoryType(logicalDevice, requiredProperties);
     if (typeIndex == -1) {
-        return nullptr;
+        logger.error("failed to find a suitable memory type for allocation");
+        return 0;
     }
 
-    VulkanBuffer* buffer = new VulkanBuffer(logicalDevice.device, static_cast<uint32_t>(typeIndex), size);
-    this->buffers.push_back(buffer);
+    VkMemoryAllocateInfo allocateInfo{};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocateInfo.allocationSize = size;
+    allocateInfo.memoryTypeIndex = typeIndex;
 
-    return buffer;
+    auto block = new VulkanMemoryBlock();
+    block->properties = requiredProperties;
+    block->typeIndex = typeIndex;
+
+    if (vkAllocateMemory(logicalDevice.device, &allocateInfo, nullptr, &block->handle) != VK_SUCCESS) {
+        logger.error(format("failed to allocate memory of size {}", size));
+        delete block;
+        return 0;
+    }
+
+    VkDeviceSize committedMemoryInBytes;
+    vkGetDeviceMemoryCommitment(logicalDevice.device, block->handle, &committedMemoryInBytes);
+
+    auto id = this->memoryBlocksRegistery.put(block);
+    logger.debugf("created a memory block of size {} with id {} ({} bytes commited)", size, id, committedMemoryInBytes);
+
+    return id;
+}
+void VulkanBackend::downloadFromMemory(MemoryBlockId srcId, void* dst, size_t size, size_t offset) {
+    auto block = memoryBlocksRegistery.get(srcId);
+    if (block == nullptr) {
+        logger.error(format("attempted to download from invalid MemoryBlockId {}", srcId));
+        return;
+    }
+
+    void* mappedMemory;
+    vkMapMemory(logicalDevice.device, block->handle, offset, size, 0, &mappedMemory);
+    memcpy(dst, mappedMemory, size);
+    vkUnmapMemory(logicalDevice.device, block->handle);
+}
+void VulkanBackend::uploadToMemory(MemoryBlockId dstId, void* src, size_t size, size_t offset) {
+    auto block = memoryBlocksRegistery.get(dstId);
+    if (block == nullptr) {
+        logger.error(format("attempted to download from invalid MemoryBlockId {}", dstId));
+        return;
+    }
+
+    void* mappedMemory;
+    vkMapMemory(logicalDevice.device, block->handle, offset, size, 0, &mappedMemory);
+    memcpy(mappedMemory, src, size);
+    vkUnmapMemory(logicalDevice.device, block->handle);
+}
+void VulkanBackend::cleanUpMemoryBlock(MemoryBlockId id) {
+    auto block = memoryBlocksRegistery.takeOut(id);
+    if (block == nullptr) {
+        logger.error(format("attempted to delete an invalid MemoryBlockId {}", id));
+        return;
+    }
+
+    vkFreeMemory(logicalDevice.device, block->handle, nullptr);
+    delete block;
+}
+
+//    +----------------------------------------------------+
+//    |                       shaders                      |
+//    +----------------------------------------------------+
+
+ShaderId VulkanBackend::createShader(const char* filePath) {
+    auto code = ReadBinaryFile(filePath);
+
+    VkShaderModuleCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.codeSize = static_cast<uint32_t>(code.size());
+    createInfo.pCode = reinterpret_cast<uint32_t*>(code.data());
+
+    auto shader = new VulkanShader();
+    if (vkCreateShaderModule(logicalDevice.device, &createInfo, nullptr, &(shader->handle)) != VK_SUCCESS) {
+        logger.error(format("failed to make a shader module from \"{}\"", filePath));
+        delete shader;
+        return 0;
+    }
+
+    auto id = this->shadersRegistry.put(shader);
+    logger.debug(format("created shader module {} from \"{}\"", id, filePath));
+
+    return id;
+}
+void VulkanBackend::cleanUpShader(ShaderId id) {
+    auto shader = shadersRegistry.takeOut(id);
+    if (shader == nullptr) {
+        logger.error(format("attempted to delete an invalid ShaderId {}", id));
+        return;
+    }
+
+    vkDestroyShaderModule(logicalDevice.device, shader->handle, nullptr);
+    delete shader;
+}
+
+//    +----------------------------------------------------+
+//    |                       buffers                      |
+//    +----------------------------------------------------+
+
+BufferId VulkanBackend::createBuffer(size_t size, BufferType type, MemoryBlockId boundMemoryId, size_t offset) {
+    auto block = memoryBlocksRegistery.get(boundMemoryId);
+    if (block == nullptr) {
+        logger.errorf("attempted to use an invalid MemoryBlockId {}", boundMemoryId);
+        return 0;
+    }
+
+    VkBufferCreateInfo bufferCreateInfo{};
+    bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferCreateInfo.size = size;
+    bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    switch (type) {
+    case VERTEX:
+        bufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        break;
+    case INDEX:
+        bufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        break;
+    case R_BUFFER:
+        bufferCreateInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        break;
+    case RW_BUFFER:
+        bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        break;
+    default:
+        break;
+    }
+
+    VkBuffer bufferHandle;
+    if (vkCreateBuffer(logicalDevice.device, &bufferCreateInfo, nullptr, &bufferHandle) != VK_SUCCESS) {
+        logger.errorf("failed to create buffer of size {}", size);
+        return 0;
+    }
+
+    VkMemoryRequirements memoryRequirements;
+    vkGetBufferMemoryRequirements(logicalDevice.device, bufferHandle, &memoryRequirements);
+
+    logger.debugf("buffer memory requirements:\n\tsize: {}\n\talignment:{}\n\ttypes:{}", memoryRequirements.size, memoryRequirements.alignment,
+                  memoryRequirements.memoryTypeBits);
+
+    if (!(block->typeIndex & memoryRequirements.memoryTypeBits)) {
+        logger.error("memory block doesn't fit buffer requirements");
+        return 0;
+    }
+
+    if (vkBindBufferMemory(logicalDevice.device, bufferHandle, block->handle, offset) != VK_SUCCESS) {
+        logger.error("failed to bind buffer memory");
+        return 0;
+    }
+
+    auto buffer = new VulkanBuffer();
+    buffer->handle = bufferHandle;
+    buffer->size = memoryRequirements.size;
+
+    auto id = this->bufferRegistry.put(buffer);
+    logger.debugf("created a buffer of size {} with id {}. bound to {}", memoryRequirements.size, id, boundMemoryId);
+
+    return id;
+}
+void VulkanBackend::cleanUpBuffer(BufferId id) {
+}
+
+PipelineHandle VulkanBackend::createComputePipeline(ShaderId computeShader) {
+    VkComputePipelineCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+
+    VkPipelineLayoutCreateInfo layoutCreateInfo{};
+
+    VkDescriptorSetAllocateInfo info;
+
+    VkBufferCreateInfo bci{};
 }
