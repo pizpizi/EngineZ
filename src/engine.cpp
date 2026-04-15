@@ -1,9 +1,6 @@
 #include "enginez/engine.hpp"
-#include "GLFW/glfw3.h"
-#include "enginez/graphics/enginez_window.hpp"
-#include "enginez/graphics/graphics_backend.hpp"
 #include "logz/logger.hpp"
-#include "vulkan/vulkan_backend.hpp"
+#include "enginez/graphics/vulkan_backend.hpp"
 #include <cstdint>
 #include <format>
 #include <memory>
@@ -15,9 +12,7 @@ Engine::Engine(EngineCreateInfo createInfo) {
     setupLogger();
 
     logger.info("setup the main logger");
-    if (createInfo.graphicsBackendType == graphics::VULKAN) {
-        graphicsBackend = std::make_unique<graphics::VulkanBackend>();
-    }
+    graphicsBackend = std::make_unique<graphics::VulkanBackend>();
 }
 
 void Engine::setupLogger(){
@@ -37,28 +32,13 @@ void Engine::cleanUp() {
 }
 
 void Engine::loop(){
-    int winNum = graphicsBackend->windows.size();
-
     auto startTime = chrono::high_resolution_clock::now();
     auto frameTime = chrono::high_resolution_clock::now() - startTime;
 
     uint64_t count = 0;
 
-    fastLogger.log("frame_time");
     while (true){
-        glfwPollEvents();
-        winNum = graphicsBackend->windows.size();
-        if(winNum == 0) break;
-
-        for (int i = graphicsBackend->windows.size()-1; i >= 0; i--) {
-            auto& win = graphicsBackend->windows[i];
-            win->update();
-            
-            if(win->getClosed()){
-                win->cleanUp();
-                graphicsBackend->windows.erase(graphicsBackend->windows.begin() + i);
-            }
-        }
+        graphicsBackend->update();
         count++;
         frameTime = chrono::high_resolution_clock::now() - startTime;
         if(frameTime.count() > 1000000000){

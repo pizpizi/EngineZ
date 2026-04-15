@@ -1,14 +1,12 @@
-#include "vulkan_backend.hpp"
+#include "enginez/graphics/vulkan_backend.hpp"
 #include "GLFW/glfw3.h"
-#include "enginez/graphics/enginez_window.hpp"
-#include "enginez/graphics/graphics_backend.hpp"
+#include "enginez/graphics/command_buffers.hpp"
+#include "enginez/graphics/pipelines.hpp"
+#include "enginez/graphics/vulkan_utilities.hpp"
+#include "enginez/graphics/vulkan_window.hpp"
 #include "logz/logger.hpp"
 #include "utilities.hpp"
-#include "vulkan/vulkan_buffer.hpp"
-#include "vulkan/vulkan_memory_block.hpp"
-#include "vulkan/vulkan_shader.hpp"
-#include "vulkan/vulkan_window.hpp"
-#include "vulkan_utilities.hpp"
+#include <X11/X.h>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -16,6 +14,7 @@
 #include <cstring>
 #include <format>
 #include <iostream>
+#include <optional>
 #include <ostream>
 #include <sstream>
 #include <stdexcept>
@@ -362,7 +361,7 @@ void VulkanBackend::setupLogicalDevice() {
     float priority = 1;
     queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queueCreateInfo.queueCount = 1;
-    queueCreateInfo.queueFamilyIndex = 0;
+    queueCreateInfo.queueFamilyIndex = 0; // TODO
     queueCreateInfo.pQueuePriorities = &priority;
 
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -386,45 +385,25 @@ void VulkanBackend::setupLogicalDevice() {
     logger.debug(buffer.str());
 }
 
-void VulkanBackend::setupCommandBuffer() {
-    VkCommandPoolCreateInfo poolCreateInfo{};
-    poolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    poolCreateInfo.queueFamilyIndex = computeQueue.family;
-
-    if (vkCreateCommandPool(logicalDevice.device, &poolCreateInfo, nullptr, &commandPool) != VK_SUCCESS) {
-        throw runtime_error("failed to create the command pool");
-    }
-
-    VkCommandBufferAllocateInfo allocationInfo{};
-    allocationInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocationInfo.commandBufferCount = 1;
-    allocationInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocationInfo.commandPool = commandPool;
-
-    if (vkAllocateCommandBuffers(logicalDevice.device, &allocationInfo, &commandBuffer) != VK_SUCCESS) {
-        throw runtime_error("failed to allocate the command buffer");
-    }
-}
-
-EnginezWindow* VulkanBackend::createWindow(std::string title, int width, int height) {
+VulkanWindow* VulkanBackend::createWindow(std::string title, int width, int height) {
     auto window = new VulkanWindow(instance, title, width, height);
     windows.push_back(window);
     return window;
 }
 
 void VulkanBackend::cleanUp() {
-    for (const auto& window : windows) {
-        window->cleanUp();
-    }
-    for (const auto& buffer : memoryBlocksRegistery.getData()) {
-        vkFreeMemory(logicalDevice.device, buffer.second->handle, nullptr);
-    }
-    for (const auto& buffer : bufferRegistry.getData()) {
-        vkDestroyBuffer(logicalDevice.device, buffer.second->handle, nullptr);
-    }
-    for (const auto& shader : shadersRegistry.getData()) {
-        vkDestroyShaderModule(logicalDevice.device, shader.second->handle, nullptr);
-    }
+    // for (const auto& window : windows) {
+    //     window->cleanUp();
+    // }
+    // for (const auto& buffer : memoryBlocks) {
+    //     vkFreeMemory(logicalDevice.device, buffer.handle, nullptr);
+    // }
+    // for (const auto& buffer : buffers) {
+    //     vkDestroyBuffer(logicalDevice.device, buffer.handle, nullptr);
+    // }
+    // for (const auto& shader : shaders) {
+    //     vkDestroyShaderModule(logicalDevice.device, shader.handle, nullptr);
+    // }
     vkDestroyDevice(logicalDevice.device, nullptr);
 
     PFN_vkDestroyDebugUtilsMessengerEXT messengerDestroyFunc =
@@ -498,13 +477,13 @@ int32_t VulkanBackend::getSuitableMemoryType(LogicalDevice& logicalDevice, VkMem
 //    |                  memory allocation                 |
 //    +----------------------------------------------------+
 
-MemoryBlockId VulkanBackend::allocateMemory(size_t size) {
+std::optional<MemoryBlock> VulkanBackend::allocateMemory(size_t size) {
     VkMemoryPropertyFlags requiredProperties =
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     auto typeIndex = getSuitableMemoryType(logicalDevice, requiredProperties);
     if (typeIndex == -1) {
         logger.error("failed to find a suitable memory type for allocation");
-        return 0;
+        return std::nullopt;
     }
 
     VkMemoryAllocateInfo allocateInfo{};
@@ -512,64 +491,35 @@ MemoryBlockId VulkanBackend::allocateMemory(size_t size) {
     allocateInfo.allocationSize = size;
     allocateInfo.memoryTypeIndex = typeIndex;
 
-    auto block = new VulkanMemoryBlock();
-    block->properties = requiredProperties;
-    block->typeIndex = typeIndex;
-
-    if (vkAllocateMemory(logicalDevice.device, &allocateInfo, nullptr, &block->handle) != VK_SUCCESS) {
+    VkDeviceMemory memoryHandle;
+    if (vkAllocateMemory(logicalDevice.device, &allocateInfo, nullptr, &memoryHandle) != VK_SUCCESS) {
         logger.error(format("failed to allocate memory of size {}", size));
-        delete block;
-        return 0;
+        return std::nullopt;
     }
 
-    VkDeviceSize committedMemoryInBytes;
-    vkGetDeviceMemoryCommitment(logicalDevice.device, block->handle, &committedMemoryInBytes);
-
-    auto id = this->memoryBlocksRegistery.put(block);
-    logger.debugf("created a memory block of size {} with id {} ({} bytes commited)", size, id, committedMemoryInBytes);
-
-    return id;
+    return MemoryBlock(memoryHandle, requiredProperties, typeIndex);
 }
-void VulkanBackend::downloadFromMemory(MemoryBlockId srcId, void* dst, size_t size, size_t offset) {
-    auto block = memoryBlocksRegistery.get(srcId);
-    if (block == nullptr) {
-        logger.error(format("attempted to download from invalid MemoryBlockId {}", srcId));
-        return;
-    }
-
+void VulkanBackend::downloadFromMemory(MemoryBlock block, void* dst, size_t size, size_t offset) {
     void* mappedMemory;
-    vkMapMemory(logicalDevice.device, block->handle, offset, size, 0, &mappedMemory);
+    vkMapMemory(logicalDevice.device, block.handle, offset, size, 0, &mappedMemory);
     memcpy(dst, mappedMemory, size);
-    vkUnmapMemory(logicalDevice.device, block->handle);
+    vkUnmapMemory(logicalDevice.device, block.handle);
 }
-void VulkanBackend::uploadToMemory(MemoryBlockId dstId, void* src, size_t size, size_t offset) {
-    auto block = memoryBlocksRegistery.get(dstId);
-    if (block == nullptr) {
-        logger.error(format("attempted to download from invalid MemoryBlockId {}", dstId));
-        return;
-    }
-
+void VulkanBackend::uploadToMemory(MemoryBlock block, void* src, size_t size, size_t offset) {
     void* mappedMemory;
-    vkMapMemory(logicalDevice.device, block->handle, offset, size, 0, &mappedMemory);
+    vkMapMemory(logicalDevice.device, block.handle, offset, size, 0, &mappedMemory);
     memcpy(mappedMemory, src, size);
-    vkUnmapMemory(logicalDevice.device, block->handle);
+    vkUnmapMemory(logicalDevice.device, block.handle);
 }
-void VulkanBackend::cleanUpMemoryBlock(MemoryBlockId id) {
-    auto block = memoryBlocksRegistery.takeOut(id);
-    if (block == nullptr) {
-        logger.error(format("attempted to delete an invalid MemoryBlockId {}", id));
-        return;
-    }
-
-    vkFreeMemory(logicalDevice.device, block->handle, nullptr);
-    delete block;
+void VulkanBackend::cleanUpMemoryBlock(MemoryBlock block) {
+    vkFreeMemory(logicalDevice.device, block.handle, nullptr);
 }
 
 //    +----------------------------------------------------+
 //    |                       shaders                      |
 //    +----------------------------------------------------+
 
-ShaderId VulkanBackend::createShader(const char* filePath) {
+std::optional<Shader> VulkanBackend::createShader(const char* filePath) {
     auto code = ReadBinaryFile(filePath);
 
     VkShaderModuleCreateInfo createInfo{};
@@ -577,39 +527,23 @@ ShaderId VulkanBackend::createShader(const char* filePath) {
     createInfo.codeSize = static_cast<uint32_t>(code.size());
     createInfo.pCode = reinterpret_cast<uint32_t*>(code.data());
 
-    auto shader = new VulkanShader();
-    if (vkCreateShaderModule(logicalDevice.device, &createInfo, nullptr, &(shader->handle)) != VK_SUCCESS) {
+    VkShaderModule handle;
+    if (vkCreateShaderModule(logicalDevice.device, &createInfo, nullptr, &handle) != VK_SUCCESS) {
         logger.error(format("failed to make a shader module from \"{}\"", filePath));
-        delete shader;
-        return 0;
+        return std::nullopt;
     }
 
-    auto id = this->shadersRegistry.put(shader);
-    logger.debug(format("created shader module {} from \"{}\"", id, filePath));
-
-    return id;
+    return Shader(handle);
 }
-void VulkanBackend::cleanUpShader(ShaderId id) {
-    auto shader = shadersRegistry.takeOut(id);
-    if (shader == nullptr) {
-        logger.error(format("attempted to delete an invalid ShaderId {}", id));
-        return;
-    }
-
-    vkDestroyShaderModule(logicalDevice.device, shader->handle, nullptr);
-    delete shader;
+void VulkanBackend::cleanUpShader(Shader shader) {
+    vkDestroyShaderModule(logicalDevice.device, shader.handle, nullptr);
 }
 
 //    +----------------------------------------------------+
 //    |                       buffers                      |
 //    +----------------------------------------------------+
 
-BufferId VulkanBackend::createBuffer(size_t size, BufferType type, MemoryBlockId boundMemoryId, size_t offset) {
-    auto block = memoryBlocksRegistery.get(boundMemoryId);
-    if (block == nullptr) {
-        logger.errorf("attempted to use an invalid MemoryBlockId {}", boundMemoryId);
-        return 0;
-    }
+std::optional<Buffer> VulkanBackend::createBuffer(size_t size, BufferType type, MemoryBlock block, size_t offset) {
 
     VkBufferCreateInfo bufferCreateInfo{};
     bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -635,7 +569,7 @@ BufferId VulkanBackend::createBuffer(size_t size, BufferType type, MemoryBlockId
     VkBuffer bufferHandle;
     if (vkCreateBuffer(logicalDevice.device, &bufferCreateInfo, nullptr, &bufferHandle) != VK_SUCCESS) {
         logger.errorf("failed to create buffer of size {}", size);
-        return 0;
+        return std::nullopt;
     }
 
     VkMemoryRequirements memoryRequirements;
@@ -644,83 +578,183 @@ BufferId VulkanBackend::createBuffer(size_t size, BufferType type, MemoryBlockId
     logger.debugf("buffer memory requirements:\n\tsize: {}\n\talignment:{}\n\ttypes:{}", memoryRequirements.size, memoryRequirements.alignment,
                   memoryRequirements.memoryTypeBits);
 
-    if (!(block->typeIndex & memoryRequirements.memoryTypeBits)) {
+    if (!((1 << block.typeIndex) & memoryRequirements.memoryTypeBits)) {
         logger.error("memory block doesn't fit buffer requirements");
-        return 0;
+        return std::nullopt;
     }
 
-    if (vkBindBufferMemory(logicalDevice.device, bufferHandle, block->handle, offset) != VK_SUCCESS) {
+    if (vkBindBufferMemory(logicalDevice.device, bufferHandle, block.handle, offset) != VK_SUCCESS) {
         logger.error("failed to bind buffer memory");
-        return 0;
+        return std::nullopt;
     }
 
-    auto buffer = new VulkanBuffer();
-    buffer->handle = bufferHandle;
-    buffer->size = memoryRequirements.size;
-
-    auto id = this->bufferRegistry.put(buffer);
-    logger.debugf("created a buffer of size {} with id {}. bound to {}", memoryRequirements.size, id, boundMemoryId);
-
-    return id;
+    return Buffer(bufferHandle, memoryRequirements.size);
+    ;
 }
-void VulkanBackend::cleanUpBuffer(BufferId id) {
-    auto buffer = bufferRegistry.takeOut(id);
-    if (buffer == nullptr) {
-        logger.error(format("attempted to delete an invalid BufferId {}", id));
-        return;
-    }
-
-    vkDestroyBuffer(logicalDevice.device, buffer->handle, nullptr);
-    delete buffer;
+void VulkanBackend::cleanUpBuffer(Buffer buffer) {
+    vkDestroyBuffer(logicalDevice.device, buffer.handle, nullptr);
 }
 
-PipelineHandle VulkanBackend::createComputePipeline(ShaderId computeShader) {
-    auto shader = shadersRegistry.get(computeShader);
-    if (shader == nullptr) {
-        logger.error(format("invalid compute ShaderId {}", computeShader));
-        return 0;
-    }
-
+std::optional<PipeLine> VulkanBackend::createComputePipeline(Shader computeShader, PipelineLayout layout) {
     VkPipelineShaderStageCreateInfo shaderStageCreateInfo{};
     shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-    shaderStageCreateInfo.module = shader->handle;
+    shaderStageCreateInfo.module = computeShader.handle;
     shaderStageCreateInfo.pName = "main";
-
-    VkDescriptorSetLayoutBinding test[] = {{
-                                               .binding = 0,
-                                               .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                                               .descriptorCount = 1,
-                                               .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-                                           },
-                                           {
-                                               .binding = 1,
-                                               .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                               .descriptorCount = 1,
-                                               .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-                                           }};
-                                           
-    VkDescriptorSetLayoutCreateInfo set0LayoutCreateInfo{};
-    set0LayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    set0LayoutCreateInfo.bindingCount = 2;
-    set0LayoutCreateInfo.pBindings = test;
-
-    VkDescriptorSetLayout dsLayout;
-    vkCreateDescriptorSetLayout(logicalDevice.device, &set0LayoutCreateInfo, nullptr, &dsLayout);
-
-    VkPipelineLayoutCreateInfo layoutCreateInfo{};
-    layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutCreateInfo.setLayoutCount = 1;
-    layoutCreateInfo.pSetLayouts = &dsLayout;
-    layoutCreateInfo.pushConstantRangeCount = 0;
-
-    VkPipelineLayout pipelineLayout;
-    vkCreatePipelineLayout(logicalDevice.device, &layoutCreateInfo, nullptr, &pipelineLayout);
 
     VkComputePipelineCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
     createInfo.stage = shaderStageCreateInfo;
-    createInfo.layout = pipelineLayout;
+    createInfo.layout = layout.handle;
 
-    vkCreateComputePipelines(logicalDevice.device, nullptr, 1, &createInfo, nullptr, &computePipeline);
+    VkPipeline handle;
+    if (vkCreateComputePipelines(logicalDevice.device, nullptr, 1, &createInfo, nullptr, &handle) != VK_SUCCESS) {
+        logger.error("failed to create compute pipeline");
+        return std::nullopt;
+    }
+
+    return PipeLine(handle);
+}
+
+std::optional<PipelineLayout> VulkanBackend::createPipelineLayout(uint32_t descriptorSetCount, DescriptorSetLayout* pDescriptorSetLayouts) {
+    VkPipelineLayoutCreateInfo layoutCreateInfo{};
+    layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutCreateInfo.setLayoutCount = descriptorSetCount;
+    layoutCreateInfo.pSetLayouts = pDescriptorSetLayouts;
+    layoutCreateInfo.pushConstantRangeCount = 0;
+
+    VkPipelineLayout handle;
+    if (vkCreatePipelineLayout(logicalDevice.device, &layoutCreateInfo, nullptr, &handle) != VK_SUCCESS) {
+        logger.error("failed to create pipeline layout");
+        return std::nullopt;
+    }
+
+    return PipelineLayout(handle);
+}
+
+std::optional<DescriptorSetLayout> VulkanBackend::createDescriptorSetLayout(VkDescriptorSetLayoutBinding* bindings, uint32_t bindingCount) {
+    VkDescriptorSetLayoutCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    createInfo.bindingCount = bindingCount;
+    createInfo.pBindings = bindings;
+
+    VkDescriptorSetLayout handle;
+    if (vkCreateDescriptorSetLayout(logicalDevice.device, &createInfo, nullptr, &handle) != VK_SUCCESS) {
+        logger.error("failed to create the descriptor set layout");
+        return std::nullopt;
+    }
+
+    return DescriptorSetLayout(handle);
+}
+void VulkanBackend::cleanUpDescriptorSetLayout(DescriptorSetLayout layout) {
+    vkDestroyDescriptorSetLayout(logicalDevice.device, layout, nullptr);
+}
+
+std::optional<DescriptorPool> VulkanBackend::createDescriptorSetPool(std::map<VkDescriptorType, uint32_t> resourceCount, uint32_t maxSets) {
+    std::vector<VkDescriptorPoolSize> poolSizes;
+    poolSizes.reserve(resourceCount.size());
+    for (auto& rsc : resourceCount) {
+        poolSizes.push_back({.type = rsc.first, .descriptorCount = rsc.second});
+    }
+
+    VkDescriptorPoolCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    createInfo.maxSets = maxSets;
+    createInfo.poolSizeCount = static_cast<uint32_t>(resourceCount.size());
+    createInfo.pPoolSizes = poolSizes.data();
+
+    VkDescriptorPool handle;
+
+    if (vkCreateDescriptorPool(logicalDevice.device, &createInfo, nullptr, &handle) != VK_SUCCESS) {
+        logger.error("failed to create descriptor pool");
+        return std::nullopt;
+    }
+
+    return DescriptorPool(handle);
+}
+void VulkanBackend::cleanUpcreateDescriptorSetPool(DescriptorPool layout) {
+    vkDestroyDescriptorPool(logicalDevice.device, layout.handle, nullptr);
+}
+
+bool VulkanBackend::allocateDescriptorSets(DescriptorPool pool, uint32_t count, DescriptorSetLayout* pLayouts, DescriptorSet* pDescriptorSets) {
+    VkDescriptorSetAllocateInfo allocationInfo{};
+    allocationInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocationInfo.descriptorSetCount = count;
+    allocationInfo.descriptorPool = pool.handle;
+    allocationInfo.pSetLayouts = pLayouts;
+
+    if (vkAllocateDescriptorSets(logicalDevice.device, &allocationInfo, pDescriptorSets) != VK_SUCCESS) {
+        logger.error("failed to allocate descriptor sets");
+        return false;
+    }
+
+    return true;
+}
+
+void VulkanBackend::updateDescriptorSets(std::vector<VkWriteDescriptorSet> writes, std::vector<VkCopyDescriptorSet> copies) {
+    vkUpdateDescriptorSets(logicalDevice.device, static_cast<uint32_t>(writes.size()), writes.data(), static_cast<uint32_t>(copies.size()),
+                           copies.data());
+}
+
+optional<CommandPool> VulkanBackend::createCommandPool() {
+    VkCommandPoolCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    createInfo.queueFamilyIndex = computeQueue.family;
+
+    VkCommandPool handle;
+    if (vkCreateCommandPool(logicalDevice.device, &createInfo, nullptr, &handle) != VK_SUCCESS) {
+        logger.error("failed to create command pool");
+        return nullopt;
+    }
+
+    return CommandPool(handle);
+}
+optional<CommandBuffer> VulkanBackend::allocateCommandBuffer(CommandPool pool) {
+    VkCommandBuffer handle;
+
+    VkCommandBufferAllocateInfo allocationInfo{};
+    allocationInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocationInfo.commandPool = pool.handle;
+    allocationInfo.commandBufferCount = 1; // TODO
+    allocationInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+    if (vkAllocateCommandBuffers(logicalDevice.device, &allocationInfo, &handle) != VK_SUCCESS) {
+        logger.error("failed to allocate command buffers");
+        return nullopt;
+    }
+
+    return CommandBuffer(handle);
+}
+bool VulkanBackend::submitAndSynchronize(CommandBuffer commandBuffer) {
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer.handle;
+
+    if (vkQueueSubmit(computeQueue.handle, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+        logger.error("Failed to submit compute command buffer!");
+        return false;
+    }
+
+    // Wait for the queue to finish executing the submitted commands
+    if (vkQueueWaitIdle(computeQueue.handle) != VK_SUCCESS) {
+        logger.error("Failed to wait for queue to become idle!");
+        return false;
+    }
+
+    return true;
+}
+
+void VulkanBackend::update() {
+    glfwPollEvents();
+
+    for (int i = windows.size() - 1; i >= 0; i--) {
+        auto& win = windows[i];
+        win->update();
+
+        if (win->isClosed()) {
+            win->cleanUp();
+            windows.erase(windows.begin() + i);
+        }
+    }
 }

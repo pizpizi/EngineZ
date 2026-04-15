@@ -1,0 +1,245 @@
+[00:00:000:201] [INFO]  [EnginZ] setup the main logger
+[00:00:000:403] [INFO]  [Vulkan] vulkan logger setup.
+[00:00:007:227] [INFO]  [Vulkan] initialized glfw
+[00:00:007:456] [INFO]  [Vulkan] Api version: 1.3.275
+[00:00:028:090] [DEBUG] [Vulkan] available instance extensions :
+
+VK_KHR_device_group_creation: 1
+VK_KHR_display: 23
+VK_KHR_external_fence_capabilities: 1
+VK_KHR_external_memory_capabilities: 1
+VK_KHR_external_semaphore_capabilities: 1
+VK_KHR_get_display_properties2: 1
+VK_KHR_get_physical_device_properties2: 2
+VK_KHR_get_surface_capabilities2: 1
+VK_KHR_surface: 25
+VK_KHR_surface_protected_capabilities: 1
+VK_KHR_wayland_surface: 6
+VK_KHR_xcb_surface: 6
+VK_KHR_xlib_surface: 6
+VK_EXT_acquire_drm_display: 1
+VK_EXT_acquire_xlib_display: 1
+VK_EXT_debug_report: 10
+VK_EXT_debug_utils: 2
+VK_EXT_direct_mode_display: 1
+VK_EXT_display_surface_counter: 1
+VK_EXT_headless_surface: 1
+VK_EXT_surface_maintenance1: 1
+VK_EXT_swapchain_colorspace: 5
+VK_KHR_portability_enumeration: 1
+VK_LUNARG_direct_driver_loading: 1
+[00:00:028:096] [DEBUG] [Vulkan] available instance layers :
+
+VK_LAYER_NV_optimus: NVIDIA Optimus layer
+VK_LAYER_MESA_device_select: Linux device selection layer
+VK_LAYER_INTEL_nullhw: INTEL NULL HW
+VK_LAYER_KHRONOS_validation: Khronos Validation Layer
+VK_LAYER_MESA_overlay: Mesa Overlay layer
+[00:00:028:097] [DEBUG] [Vulkan] required glfw extensions :
+
+VK_KHR_surface
+VK_KHR_xcb_surface
+[00:00:028:374] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_asahi.so
+[00:00:028:381] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_virtio.so
+[00:00:028:387] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_intel.so
+[00:00:028:392] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_gfxstream.so
+[00:00:028:397] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_nouveau.so
+[00:00:028:403] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_radeon.so
+[00:00:028:408] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_intel_hasvk.so
+[00:00:028:413] [INFO]  [Validation Layer] Searching for ICD drivers named libGLX_nvidia.so.0
+[00:00:028:420] [INFO]  [Validation Layer] Searching for ICD drivers named libvulkan_lvp.so
+[00:00:056:624] [INFO]  [Validation Layer] Loading layer library libVkLayer_khronos_validation.so
+[00:00:056:744] [INFO]  [Validation Layer] Loading layer library libVkLayer_MESA_device_select.so
+[00:00:058:784] [INFO]  [Validation Layer] terminator_CreateInstance: ICD "libvulkan_gfxstream.so" vkEnumerateInstanceVersion returned error. The ICD will be treated as a 1.0 ICD
+[00:00:066:665] [INFO]  [Validation Layer] Copying old device 0 into new device 0
+[00:00:066:667] [INFO]  [Validation Layer] Copying old device 1 into new device 1
+[00:00:066:667] [INFO]  [Validation Layer] Copying old device 2 into new device 2
+[00:00:066:752] [INFO]  [Validation Layer] Copying old device 0 into new device 0
+[00:00:066:753] [INFO]  [Validation Layer] Copying old device 1 into new device 1
+[00:00:066:753] [INFO]  [Validation Layer] Copying old device 2 into new device 2
+[00:00:066:767] [INFO]  [Validation Layer] Copying old device 0 into new device 0
+[00:00:066:768] [INFO]  [Validation Layer] Copying old device 1 into new device 1
+[00:00:066:768] [INFO]  [Validation Layer] Copying old device 2 into new device 2
+[00:00:067:084] [INFO]  [Validation Layer] Copying old device 0 into new device 0
+[00:00:067:085] [INFO]  [Validation Layer] Copying old device 1 into new device 1
+[00:00:067:086] [INFO]  [Validation Layer] Copying old device 2 into new device 2
+[00:00:067:099] [INFO]  [Validation Layer] Copying old device 0 into new device 0
+[00:00:067:099] [INFO]  [Validation Layer] Copying old device 1 into new device 1
+[00:00:067:100] [INFO]  [Validation Layer] Copying old device 2 into new device 2
+[00:00:067:462] [INFO]  [Vulkan] devices: 
+0. Intel(R) Graphics (RPL-S) :
+	type: integrated gpu
+	score: 0
+	driver name: Intel open-source Mesa driver
+	node mask: 0
+	memory:
+		heaps:
+			0.
+				size: 12273798144
+		types:
+			0.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+			1.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+			2.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+					HOST CACHED BIT
+			3.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+					PROTECTED BIT
+			4.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+			5.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+			6.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+					HOST CACHED BIT
+	queue families:
+		0.
+			queue count: 1
+			capabilities:
+				graphics
+				compute
+				transfer
+				sparse binding
+1. NVIDIA GeForce RTX 4060 Laptop GPU :
+	type: discrete gpu
+	score: 1
+	driver name: NVIDIA
+	node mask: 1
+	memory:
+		heaps:
+			0.
+				size: 8585740288
+			1.
+				size: 12273798144
+		types:
+			0.
+				heap: 1
+				properties:
+			1.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+			2.
+				heap: 1
+				properties:
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+			3.
+				heap: 1
+				properties:
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+					HOST CACHED BIT
+			4.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+	queue families:
+		0.
+			queue count: 16
+			capabilities:
+				graphics
+				compute
+				transfer
+				sparse binding
+		1.
+			queue count: 2
+			capabilities:
+				transfer
+				sparse binding
+		2.
+			queue count: 8
+			capabilities:
+				compute
+				transfer
+				sparse binding
+		3.
+			queue count: 1
+			capabilities:
+				transfer
+				video decode
+				sparse binding
+		4.
+			queue count: 1
+			capabilities:
+				transfer
+				sparse binding
+				optical flow
+2. llvmpipe (LLVM 20.1.2, 256 bits) :
+	type: cpu
+	score: 1
+	driver name: llvmpipe
+	node mask: 0
+	memory:
+		heaps:
+			0.
+				size: 16365064192
+		types:
+			0.
+				heap: 0
+				properties:
+					DEVICE LOCAL BIT
+					HOST VISIBLE BIT
+					HOST COHERENT BIT
+					HOST CACHED BIT
+	queue families:
+		0.
+			queue count: 1
+			capabilities:
+				graphics
+				compute
+				transfer
+				sparse binding
+
+[00:00:067:466] [INFO]  [Vulkan] chose NVIDIA GeForce RTX 4060 Laptop GPU as the device
+[00:00:091:518] [DEBUG] [Vulkan] compute queue handle: 0x6321c261dbf0
+[00:00:092:447] [DEBUG] [Vulkan] buffer memory requirements:
+	size: 128
+	alignment:64
+	types:31
+[00:00:092:459] [DEBUG] [Vulkan] buffer memory requirements:
+	size: 64
+	alignment:16
+	types:31
+[00:00:093:442] [ERROR] [Validation Layer] Validation Error: [ VUID-vkDestroyDevice-device-05137 ] Object 0: handle = 0x6321c2844200, type = VK_OBJECT_TYPE_COMMAND_BUFFER; | MessageID = 0x4872eaa0 | vkCreateDevice():  OBJ ERROR : For VkDevice 0x6321c23fa6a0[], VkCommandBuffer 0x6321c2844200[] has not been destroyed. The Vulkan spec states: All child objects created on device must have been destroyed prior to destroying device (https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#VUID-vkDestroyDevice-device-05137)
+[00:00:093:545] [ERROR] [Validation Layer] Validation Error: [ VUID-vkDestroyDevice-device-05137 ] Object 0: handle = 0xa000000000a, type = VK_OBJECT_TYPE_BUFFER; | MessageID = 0x4872eaa0 | vkCreateDevice():  OBJ ERROR : For VkDevice 0x6321c23fa6a0[], VkBuffer 0xa000000000a[] has not been destroyed. The Vulkan spec states: All child objects created on device must have been destroyed prior to destroying device (https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#VUID-vkDestroyDevice-device-05137)
+[00:00:093:605] [ERROR] [Validation Layer] Validation Error: [ VUID-vkDestroyDevice-device-05137 ] Object 0: handle = 0xb000000000b, type = VK_OBJECT_TYPE_BUFFER; | MessageID = 0x4872eaa0 | vkCreateDevice():  OBJ ERROR : For VkDevice 0x6321c23fa6a0[], VkBuffer 0xb000000000b[] has not been destroyed. The Vulkan spec states: All child objects created on device must have been destroyed prior to destroying device (https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#VUID-vkDestroyDevice-device-05137)
+[00:00:093:666] [ERROR] [Validation Layer] Validation Error: [ VUID-vkDestroyDevice-device-05137 ] Object 0: handle = 0x80000000008, type = VK_OBJECT_TYPE_DEVICE_MEMORY; | MessageID = 0x4872eaa0 | vkCreateDevice():  OBJ ERROR : For VkDevice 0x6321c23fa6a0[], VkDeviceMemory 0x80000000008[] has not been destroyed. The Vulkan spec states: All child objects created on device must have been destroyed prior to destroying device (https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#VUID-vkDestroyDevice-device-05137)
+[00:00:093:722] [ERROR] [Validation Layer] Validation Error: [ VUID-vkDestroyDevice-device-05137 ] Object 0: handle = 0x90000000009, type = VK_OBJECT_TYPE_DEVICE_MEMORY; | MessageID = 0x4872eaa0 | vkCreateDevice():  OBJ ERROR : For VkDevice 0x6321c23fa6a0[], VkDeviceMemory 0x90000000009[] has not been destroyed. The Vulkan spec states: All child objects created on device must have been destroyed prior to destroying device (https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#VUID-vkDestroyDevice-device-05137)
+[00:00:093:781] [ERROR] [Validation Layer] Validation Error: [ VUID-vkDestroyDevice-device-05137 ] Object 0: handle = 0x40000000004, type = VK_OBJECT_TYPE_SHADER_MODULE; | MessageID = 0x4872eaa0 | vkCreateDevice():  OBJ ERROR : For VkDevice 0x6321c23fa6a0[], VkShaderModule 0x40000000004[] has not been destroyed. The Vulkan spec states: All child objects created on device must have been destroyed prior to destroying device (https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#VUID-vkDestroyDevice-device-05137)
+[00:00:093:838] [ERROR] [Validation Layer] Validation Error: [ VUID-vkDestroyDevice-device-05137 ] Object 0: handle = 0x30000000003, type = VK_OBJECT_TYPE_PIPELINE_LAYOUT; | MessageID = 0x4872eaa0 | vkCreateDevice():  OBJ ERROR : For VkDevice 0x6321c23fa6a0[], VkPipelineLayout 0x30000000003[] has not been destroyed. The Vulkan spec states: All child objects created on device must have been destroyed prior to destroying device (https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#VUID-vkDestroyDevice-device-05137)
+[00:00:093:899] [ERROR] [Validation Layer] Validation Error: [ VUID-vkDestroyDevice-device-05137 ] Object 0: handle = 0x50000000005, type = VK_OBJECT_TYPE_PIPELINE; | MessageID = 0x4872eaa0 | vkCreateDevice():  OBJ ERROR : For VkDevice 0x6321c23fa6a0[], VkPipeline 0x50000000005[] has not been destroyed. The Vulkan spec states: All child objects created on device must have been destroyed prior to destroying device (https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#VUID-vkDestroyDevice-device-05137)
+[00:00:093:956] [ERROR] [Validation Layer] Validation Error: [ VUID-vkDestroyDevice-device-05137 ] Object 0: handle = 0x20000000002, type = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT; | MessageID = 0x4872eaa0 | vkCreateDevice():  OBJ ERROR : For VkDevice 0x6321c23fa6a0[], VkDescriptorSetLayout 0x20000000002[] has not been destroyed. The Vulkan spec states: All child objects created on device must have been destroyed prior to destroying device (https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#VUID-vkDestroyDevice-device-05137)
+[00:00:094:012] [ERROR] [Validation Layer] Validation Error: [ VUID-vkDestroyDevice-device-05137 ] Object 0: handle = 0x70000000007, type = VK_OBJECT_TYPE_DESCRIPTOR_SET; | MessageID = 0x4872eaa0 | vkCreateDevice():  OBJ ERROR : For VkDevice 0x6321c23fa6a0[], VkDescriptorSet 0x70000000007[] has not been destroyed. The Vulkan spec states: All child objects created on device must have been destroyed prior to destroying device (https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#VUID-vkDestroyDevice-device-05137)
+[00:00:094:065] [ERROR] [Validation Layer] Validation Error: [ VUID-vkDestroyDevice-device-05137 ] Object 0: handle = 0x60000000006, type = VK_OBJECT_TYPE_DESCRIPTOR_POOL; | MessageID = 0x4872eaa0 | vkCreateDevice():  OBJ ERROR : For VkDevice 0x6321c23fa6a0[], VkDescriptorPool 0x60000000006[] has not been destroyed. The Vulkan spec states: All child objects created on device must have been destroyed prior to destroying device (https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#VUID-vkDestroyDevice-device-05137)
+[00:00:094:120] [ERROR] [Validation Layer] Validation Error: [ VUID-vkDestroyDevice-device-05137 ] Object 0: handle = 0xc000000000c, type = VK_OBJECT_TYPE_COMMAND_POOL; | MessageID = 0x4872eaa0 | vkCreateDevice():  OBJ ERROR : For VkDevice 0x6321c23fa6a0[], VkCommandPool 0xc000000000c[] has not been destroyed. The Vulkan spec states: All child objects created on device must have been destroyed prior to destroying device (https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#VUID-vkDestroyDevice-device-05137)
+[00:00:100:766] [INFO]  [Validation Layer] Unloading layer library libVkLayer_MESA_device_select.so
+[00:00:105:616] [INFO]  [Validation Layer] Unloading layer library libVkLayer_khronos_validation.so
+[00:00:114:041] [INFO]  [Vulkan] cleaned up vulkan graphics backend
+[00:00:114:043] [INFO]  [EnginZ] cleaned up the engine

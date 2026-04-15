@@ -1,10 +1,8 @@
-#include "vulkan_window.hpp"
+#include "enginez/graphics/vulkan_window.hpp"
 #include "GLFW/glfw3.h"
 #include <format>
-#include <new>
 #include <stdexcept>
 #include <string>
-#include "GLFW/glfw3.h"
 #include "logz/logger.hpp"
 
 using namespace enginez::graphics;
@@ -15,7 +13,7 @@ void VulkanWindow::setupLogger() {
 }
 
 VulkanWindow::VulkanWindow(VkInstance& instance, std::string title, int width, int height)
-    : EnginezWindow(title, width, height), logger(logz::createDefaultLogger(logz::SINCE_PROGRAM_START, title)) {
+    :logger(logz::createDefaultLogger(logz::SINCE_PROGRAM_START, title)), width(width), height(height), title(title) {
     setupLogger();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -39,6 +37,9 @@ void VulkanWindow::update() {
     }
 }
 
+bool VulkanWindow::isClosed(){
+    return closed;
+}
 
 void VulkanWindow::setHeight(int val){
     //TODO
