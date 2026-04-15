@@ -61,12 +61,17 @@ namespace enginez::graphics {
         VkDebugUtilsMessengerEXT debugMessenger;
         LogicalDevice logicalDevice;
         Queue computeQueue;
+        VkCommandPool commandPool;
+        VkCommandBuffer commandBuffer;
+        VkPipeline computePipeline;
+
 
         void setupLogger();
         void setupInstance();
         void setupDebugMessenger();
         void setupPhysicalDevice();
         void setupLogicalDevice();
+        void setupCommandBuffer();
 
         int32_t getSuitableMemoryType(LogicalDevice& logicalDevice, VkMemoryPropertyFlags requiredFlags);
 

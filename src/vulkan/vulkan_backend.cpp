@@ -386,6 +386,26 @@ void VulkanBackend::setupLogicalDevice() {
     logger.debug(buffer.str());
 }
 
+void VulkanBackend::setupCommandBuffer() {
+    VkCommandPoolCreateInfo poolCreateInfo{};
+    poolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolCreateInfo.queueFamilyIndex = computeQueue.family;
+
+    if (vkCreateCommandPool(logicalDevice.device, &poolCreateInfo, nullptr, &commandPool) != VK_SUCCESS) {
+        throw runtime_error("failed to create the command pool");
+    }
+
+    VkCommandBufferAllocateInfo allocationInfo{};
+    allocationInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocationInfo.commandBufferCount = 1;
+    allocationInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocationInfo.commandPool = commandPool;
+
+    if (vkAllocateCommandBuffers(logicalDevice.device, &allocationInfo, &commandBuffer) != VK_SUCCESS) {
+        throw runtime_error("failed to allocate the command buffer");
+    }
+}
+
 EnginezWindow* VulkanBackend::createWindow(std::string title, int width, int height) {
     auto window = new VulkanWindow(instance, title, width, height);
     windows.push_back(window);
@@ -644,15 +664,63 @@ BufferId VulkanBackend::createBuffer(size_t size, BufferType type, MemoryBlockId
     return id;
 }
 void VulkanBackend::cleanUpBuffer(BufferId id) {
+    auto buffer = bufferRegistry.takeOut(id);
+    if (buffer == nullptr) {
+        logger.error(format("attempted to delete an invalid BufferId {}", id));
+        return;
+    }
+
+    vkDestroyBuffer(logicalDevice.device, buffer->handle, nullptr);
+    delete buffer;
 }
 
 PipelineHandle VulkanBackend::createComputePipeline(ShaderId computeShader) {
-    VkComputePipelineCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    auto shader = shadersRegistry.get(computeShader);
+    if (shader == nullptr) {
+        logger.error(format("invalid compute ShaderId {}", computeShader));
+        return 0;
+    }
+
+    VkPipelineShaderStageCreateInfo shaderStageCreateInfo{};
+    shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    shaderStageCreateInfo.module = shader->handle;
+    shaderStageCreateInfo.pName = "main";
+
+    VkDescriptorSetLayoutBinding test[] = {{
+                                               .binding = 0,
+                                               .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                                               .descriptorCount = 1,
+                                               .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                                           },
+                                           {
+                                               .binding = 1,
+                                               .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                               .descriptorCount = 1,
+                                               .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                                           }};
+                                           
+    VkDescriptorSetLayoutCreateInfo set0LayoutCreateInfo{};
+    set0LayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    set0LayoutCreateInfo.bindingCount = 2;
+    set0LayoutCreateInfo.pBindings = test;
+
+    VkDescriptorSetLayout dsLayout;
+    vkCreateDescriptorSetLayout(logicalDevice.device, &set0LayoutCreateInfo, nullptr, &dsLayout);
 
     VkPipelineLayoutCreateInfo layoutCreateInfo{};
+    layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutCreateInfo.setLayoutCount = 1;
+    layoutCreateInfo.pSetLayouts = &dsLayout;
+    layoutCreateInfo.pushConstantRangeCount = 0;
 
-    VkDescriptorSetAllocateInfo info;
+    VkPipelineLayout pipelineLayout;
+    vkCreatePipelineLayout(logicalDevice.device, &layoutCreateInfo, nullptr, &pipelineLayout);
 
-    VkBufferCreateInfo bci{};
+    VkComputePipelineCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    createInfo.stage = shaderStageCreateInfo;
+    createInfo.layout = pipelineLayout;
+
+    vkCreateComputePipelines(logicalDevice.device, nullptr, 1, &createInfo, nullptr, &computePipeline);
 }
