@@ -14,40 +14,62 @@ namespace enginez {
     class Engine;
 }
 namespace enginez::graphics {
+
+    enum BufferType {
+        INDEX = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VERTEX = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        R_BUFFER = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        RW_BUFFER = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+    };
+    enum QueueType {
+        GRAPHICS = VK_QUEUE_GRAPHICS_BIT,
+        COMPUTE = VK_QUEUE_COMPUTE_BIT,
+        TRANSFER = VK_QUEUE_TRANSFER_BIT,
+        PRESENT,
+    };
     struct Queue {
         VkQueue handle;
         uint32_t index;
         uint32_t family;
+        QueueType type;
     };
-    struct LogicalDevice {
-        VkDevice device;
-        VkPhysicalDevice physicalDevice;
+    struct PhysicalDevice {
+        VkPhysicalDevice handle = VK_NULL_HANDLE;
         VkPhysicalDeviceProperties properties;
         VkPhysicalDeviceMemoryProperties memoryProperties;
+        std::vector<VkQueueFamilyProperties> queueFamilyProperties;
     };
-    enum BufferType { INDEX, VERTEX, R_BUFFER, RW_BUFFER };
-    class VulkanBackend final {
+    struct Device {
+        VkDevice handle = VK_NULL_HANDLE;
+        PhysicalDevice phyisicalDevice;
+    };
+
+    class VulkanBackend {
       public:
-        void init();
+        /**
+         * @brief Initializes the Vulkan instance and device.
+         * * @param deviceQueues A vector to be populated with requested queue handles.
+         */
+        void init(std::vector<Queue>& deviceQueues);
         void cleanUp();
 
         VulkanWindow* createWindow(std::string title, int width, int height);
 
         // --------- memory blocks ---------- //
         std::optional<MemoryBlock> allocateMemory(size_t size);
-        void downloadFromMemory(MemoryBlock srcId, void* dst, size_t size, size_t offset);
-        void uploadToMemory(MemoryBlock dstId, void* src, size_t size, size_t offset);
-        void cleanUpMemoryBlock(MemoryBlock memoryBlock);
+        void downloadFromMemory(MemoryBlock& src, void* dst, size_t size, size_t offset);
+        void uploadToMemory(MemoryBlock& dst, void* src, size_t size, size_t offset);
+        void cleanUpMemoryBlock(MemoryBlock& memoryBlock);
         // ---------------------------------- //
 
         // ------------ shaders ------------- //
         std::optional<Shader> createShader(const char* filePath);
-        void cleanUpShader(Shader shader);
+        void cleanUpShader(Shader& shader);
         // ---------------------------------- //
 
         // ------------ buffers ------------- //
-        std::optional<Buffer> createBuffer(size_t size, BufferType type, MemoryBlock boundMemoryId, size_t offset);
-        void cleanUpBuffer(Buffer buffer);
+        std::optional<Buffer> createBuffer(size_t size, BufferType type, MemoryBlock& boundMemoryId, size_t offset);
+        void cleanUpBuffer(Buffer& buffer);
         // ---------------------------------- //
 
         // ----------- descriptor ----------- //
@@ -63,18 +85,17 @@ namespace enginez::graphics {
         // ---------------------------------- //
 
         // --------- command buffers -------- //
-        std::optional<CommandPool> createCommandPool();
-        std::optional<CommandBuffer> allocateCommandBuffer(CommandPool pool);
+        std::optional<CommandPool> createCommandPool(Queue& queue);
+        std::optional<CommandBuffer> allocateCommandBuffer(CommandPool& pool);
         // ---------------------------------- //
 
-        std::optional<PipeLine> createComputePipeline(Shader computeShader, PipelineLayout layout);
-        std::optional<PipelineLayout> createPipelineLayout(uint32_t descriptorSetCount, DescriptorSetLayout* pDescriptorSetLayouts);
+        std::optional<PipeLine> createComputePipeline(Shader& computeShader, PipelineLayout& layout);
+        std::optional<PipelineLayout> createPipelineLayout(uint32_t descriptorSetCount, DescriptorSetLayout* pDescriptorSetLayouts,
+                                                           uint32_t pushConstantRangesCount, VkPushConstantRange* pPushConstantRanges);
 
-        bool submitAndSynchronize(CommandBuffer commandBuffer);
+        bool submitAndSynchronize(CommandBuffer commandBuffer, Queue& queue);
 
       private:
-        friend Engine;
-
         logz::DefaultLogger& logger = logz::createDefaultLogger(logz::SINCE_PROGRAM_START, "Vulkan");
         logz::DefaultLogger& validationLayerLogger = logz::createDefaultLogger(logz::SINCE_PROGRAM_START, "Validation Layer");
 
@@ -88,20 +109,21 @@ namespace enginez::graphics {
 
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
-        LogicalDevice logicalDevice;
-        Queue computeQueue;
+        Device logicalDevice;
         VkPipeline computePipeline;
 
         void setupLogger();
         void setupInstance();
         void setupDebugMessenger();
-        void setupPhysicalDevice();
-        void setupLogicalDevice();
+        PhysicalDevice choosePhysicalDevice(std::vector<Queue> deviceQueues);
+        Device setupLogicalDevice(std::vector<Queue>& deviceQueues, PhysicalDevice phyisicalDevice);
         void setupCommandBuffer();
+
+        bool assignQueues(std::vector<VkQueueFamilyProperties>& queueFamilyProperties, std::vector<Queue>& queues);
 
         void update();
 
-        int32_t getSuitableMemoryType(LogicalDevice& logicalDevice, VkMemoryPropertyFlags requiredFlags);
+        int32_t getSuitableMemoryType(Device& logicalDevice, VkMemoryPropertyFlags requiredFlags);
 
         VkBool32 debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageTypes,
                                const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData);

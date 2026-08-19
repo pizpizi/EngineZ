@@ -14,11 +14,13 @@
 #include <cstring>
 #include <format>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <ostream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
@@ -26,27 +28,23 @@ using namespace enginez::graphics;
 using namespace std;
 
 void VulkanBackend::setupLogger() {
-    logger.addConsoleSink(true, logz::DEBUG);
-    logger.addFileSink("log.txt", logz::DEBUG);
+    logger.addConsoleSink(true, logz::ERROR);
+    logger.addFileSink("log.txt", logz::ERROR);
 
-    validationLayerLogger.addConsoleSink(true, logz::DEBUG);
-    validationLayerLogger.addFileSink("log.txt", logz::DEBUG);
+    validationLayerLogger.addConsoleSink(true, logz::ERROR);
+    validationLayerLogger.addFileSink("log.txt", logz::ERROR);
 }
 
-void VulkanBackend::init() {
+void VulkanBackend::init(std::vector<Queue>& deviceQueues) {
     setupLogger();
-    logger.info("vulkan logger setup.");
-
     if (glfwInit() != GLFW_TRUE) {
         logger.error("failed to initialize glfw");
     }
-    logger.info("initialized glfw");
-
     try {
         setupInstance();
         setupDebugMessenger();
-        setupPhysicalDevice();
-        setupLogicalDevice();
+        auto physicalDevice = choosePhysicalDevice(deviceQueues);
+        logicalDevice = setupLogicalDevice(deviceQueues, physicalDevice);
     } catch (runtime_error e) {
         logger.error(e.what());
     }
@@ -55,7 +53,7 @@ void VulkanBackend::init() {
 void VulkanBackend::setupInstance() {
     uint32_t version;
     vkEnumerateInstanceVersion(&version);
-    logger.info(format("Api version: {}.{}.{}", VK_API_VERSION_MAJOR(version), VK_API_VERSION_MINOR(version), VK_API_VERSION_PATCH(version)));
+    logger.debug(format("Api version: {}.{}.{}", VK_API_VERSION_MAJOR(version), VK_API_VERSION_MINOR(version), VK_API_VERSION_PATCH(version)));
 
     VkInstanceCreateInfo instanceCreateInfo{};
     VkApplicationInfo appCreateInfo{};
@@ -87,20 +85,20 @@ void VulkanBackend::setupInstance() {
         stringstream log;
         log << "available instance extensions :\n";
         for (const auto& ext : availableExtensions) {
-            log << endl << ext.extensionName << ": " << ext.specVersion;
+            log << '\n' << ext.extensionName << ": " << ext.specVersion;
         }
         logger.debug(log.str());
 
         log.str("");
         log << "available instance layers :\n";
         for (const auto& lay : availableLayers) {
-            log << endl << lay.layerName << ": " << lay.description;
+            log << '\n' << lay.layerName << ": " << lay.description;
         }
         logger.debug(log.str());
         log.str("");
         log << "required glfw extensions :\n";
         for (const auto& ext : glfwRequiredExtensions) {
-            log << endl << ext;
+            log << '\n' << ext;
         }
         logger.debug(log.str());
     }
@@ -156,7 +154,7 @@ void VulkanBackend::setupInstance() {
     }
 }
 
-void VulkanBackend::setupPhysicalDevice() {
+PhysicalDevice VulkanBackend::choosePhysicalDevice(std::vector<Queue> deviceQueues) {
     uint32_t deviceCount;
     vector<VkPhysicalDevice> devices;
     vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
@@ -171,7 +169,7 @@ void VulkanBackend::setupPhysicalDevice() {
     }
 
     stringstream buffer;
-    for (int i = 0; i < deviceCount; i++) {
+    for (uint32_t i = 0; i < deviceCount; i++) {
         auto device = devices[i];
 
         // ----------------------------- data ----------------------------- //
@@ -204,8 +202,8 @@ void VulkanBackend::setupPhysicalDevice() {
 
         // ---------------------------- scoring --------------------------- //
         bool hasExtensions = true;
-        bool isDescrete;
-        bool supportsQueueFamilies = false; // TODO: currently only a single compute queue is created
+        bool isDescrete = false;
+        bool supportsQueueFamilies = assignQueues(queueFamilyProperties, deviceQueues);
 
         if (properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) isDescrete = true;
         for (auto& ext : requiredDeviceExtensions) {
@@ -219,14 +217,6 @@ void VulkanBackend::setupPhysicalDevice() {
             if (!found) {
                 hasExtensions = false;
             }
-            break;
-        }
-
-        for (auto& fam : queueFamilyProperties) { // TODO: currently only a single compute queue is created
-            if (fam.queueFlags | VK_QUEUE_COMPUTE_BIT) {
-                supportsQueueFamilies = true;
-                break;
-            }
         }
 
         scores[i] = isDescrete;
@@ -234,7 +224,7 @@ void VulkanBackend::setupPhysicalDevice() {
         // ---------------------------------------------------------------- //
 
         // ----------------------------- logs ----------------------------- //
-        buffer << format("{}. {} :", i, properties.properties.deviceName) << endl;
+        buffer << format("{}. {} :", i, properties.properties.deviceName) << '\n';
         buffer << "\ttype: ";
         switch (properties.properties.deviceType) {
         case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
@@ -249,30 +239,30 @@ void VulkanBackend::setupPhysicalDevice() {
         default:
             buffer << "unknown";
         }
-        buffer << endl;
-        buffer << format("\tscore: {}", scores[i]) << endl;
-        buffer << format("\tdriver name: {}", driverProperties.driverName) << endl;
-        buffer << format("\tnode mask: {}", idProperties.deviceNodeMask) << endl;
+        buffer << '\n';
+        buffer << format("\tscore: {}", scores[i]) << '\n';
+        buffer << format("\tdriver name: {}", driverProperties.driverName) << '\n';
+        buffer << format("\tnode mask: {}", idProperties.deviceNodeMask) << '\n';
 
-        // buffer << "\tavailable extensions:" << endl;
+        // buffer << "\tavailable extensions:" << '\n';
         // for (int j = 0; j < availableDeviceExtensionsCount; j++) {
         //     auto ext = availableDeviceExtensions[j];
-        //     buffer << format("\t\t{}: {}", ext.extensionName, ext.specVersion) << endl;
+        //     buffer << format("\t\t{}: {}", ext.extensionName, ext.specVersion) << '\n';
         // }
 
-        buffer << "\tmemory:" << endl;
-        buffer << "\t\theaps:" << endl;
+        buffer << "\tmemory:" << '\n';
+        buffer << "\t\theaps:" << '\n';
         for (int j = 0; j < memoryProperties.memoryHeapCount; j++) {
             auto& heap = memoryProperties.memoryHeaps[j];
-            buffer << "\t\t\t" << j << "." << endl;
-            buffer << "\t\t\t\tsize: " << heap.size << endl;
+            buffer << "\t\t\t" << j << "." << '\n';
+            buffer << "\t\t\t\tsize: " << heap.size << '\n';
         }
-        buffer << "\t\ttypes:" << endl;
+        buffer << "\t\ttypes:" << '\n';
         for (int j = 0; j < memoryProperties.memoryTypeCount; j++) {
             auto& type = memoryProperties.memoryTypes[j];
-            buffer << "\t\t\t" << j << "." << endl;
-            buffer << "\t\t\t\theap: " << type.heapIndex << endl;
-            buffer << "\t\t\t\tproperties:" << endl;
+            buffer << "\t\t\t" << j << "." << '\n';
+            buffer << "\t\t\t\theap: " << type.heapIndex << '\n';
+            buffer << "\t\t\t\tproperties:" << '\n';
             if (type.propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
                 buffer << "\t\t\t\t\tDEVICE LOCAL BIT\n";
             }
@@ -302,33 +292,33 @@ void VulkanBackend::setupPhysicalDevice() {
             }
         }
 
-        buffer << "\tqueue families:" << endl;
+        buffer << "\tqueue families:" << '\n';
         for (int j = 0; j < queueFamilyCount; j++) {
             auto family = queueFamilyProperties[j];
 
-            buffer << format("\t\t{}.", j) << endl;
-            buffer << format("\t\t\tqueue count: {}", family.queueCount) << endl;
-            buffer << "\t\t\tcapabilities:" << endl;
+            buffer << format("\t\t{}.", j) << '\n';
+            buffer << format("\t\t\tqueue count: {}", family.queueCount) << '\n';
+            buffer << "\t\t\tcapabilities:" << '\n';
             if (family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-                buffer << "\t\t\t\tgraphics" << endl;
+                buffer << "\t\t\t\tgraphics" << '\n';
             }
             if (family.queueFlags & VK_QUEUE_COMPUTE_BIT) {
-                buffer << "\t\t\t\tcompute" << endl;
+                buffer << "\t\t\t\tcompute" << '\n';
             }
             if (family.queueFlags & VK_QUEUE_TRANSFER_BIT) {
-                buffer << "\t\t\t\ttransfer" << endl;
+                buffer << "\t\t\t\ttransfer" << '\n';
             }
             if (family.queueFlags & VK_QUEUE_VIDEO_DECODE_BIT_KHR) {
-                buffer << "\t\t\t\tvideo decode" << endl;
+                buffer << "\t\t\t\tvideo decode" << '\n';
             }
             if (family.queueFlags & VK_QUEUE_VIDEO_ENCODE_BIT_KHR) {
-                buffer << "\t\t\t\tvideo encode" << endl;
+                buffer << "\t\t\t\tvideo encode" << '\n';
             }
             if (family.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
-                buffer << "\t\t\t\tsparse binding" << endl;
+                buffer << "\t\t\t\tsparse binding" << '\n';
             }
             if (family.queueFlags & VK_QUEUE_OPTICAL_FLOW_BIT_NV) {
-                buffer << "\t\t\t\toptical flow" << endl;
+                buffer << "\t\t\t\toptical flow" << '\n';
             }
         }
         // ---------------------------------------------------------------- //
@@ -346,47 +336,114 @@ void VulkanBackend::setupPhysicalDevice() {
         throw runtime_error("no valid devices found");
     }
 
-    logicalDevice.physicalDevice = devices[chosenIndex];
-    vkGetPhysicalDeviceProperties(logicalDevice.physicalDevice, &logicalDevice.properties);
-    vkGetPhysicalDeviceMemoryProperties(logicalDevice.physicalDevice, &logicalDevice.memoryProperties);
+    PhysicalDevice chosenDevice;
+    chosenDevice.handle = devices[chosenIndex];
+    vkGetPhysicalDeviceProperties(chosenDevice.handle, &chosenDevice.properties);
+    vkGetPhysicalDeviceMemoryProperties(chosenDevice.handle, &chosenDevice.memoryProperties);
 
-    logger.info(format("chose {} as the device", logicalDevice.properties.deviceName));
+    uint32_t familyCount;
+    vkGetPhysicalDeviceQueueFamilyProperties(chosenDevice.handle, &familyCount, nullptr);
+    chosenDevice.queueFamilyProperties.resize(familyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(chosenDevice.handle, &familyCount, chosenDevice.queueFamilyProperties.data());
+
+    logger.info(format("chose {} as the device", chosenDevice.properties.deviceName));
+
+    return chosenDevice;
 }
+bool VulkanBackend::assignQueues(vector<VkQueueFamilyProperties>& queueFamilyProperties, std::vector<Queue>& queues) {
+    uint32_t familyNum = queueFamilyProperties.size();
+    uint32_t queueNum = queues.size();
 
-void VulkanBackend::setupLogicalDevice() {
+    vector<uint32_t> filled;
+    filled.resize(familyNum);
+
+    for (int i = 0; i < familyNum; i++) {
+        filled[i] = 0;
+    }
+
+    for (auto& q : queues) {
+        q.family = 0;
+        q.index = 0;
+    }
+
+    int assigned = 0;
+    while (assigned != queueNum) {
+        bool found = false;
+        for (int i = queues[assigned].family; i < familyNum; i++) {
+            if (filled[i] == queueFamilyProperties[i].queueCount) continue;
+            if (!(queueFamilyProperties[i].queueFlags & queues[assigned].type)) continue;
+
+            queues[assigned].family = i;
+            queues[assigned].index = filled[i];
+            filled[i]++;
+            found = true;
+            break;
+        }
+        if (!found && !assigned) {
+            break;
+        }
+        if (!found && assigned) {
+            queues[assigned].family = 0;
+            assigned--;
+            filled[queues[assigned].family]--;
+            queues[assigned].family++;
+            continue;
+        }
+
+        assigned++;
+    }
+
+    return assigned == queueNum;
+}
+Device VulkanBackend::setupLogicalDevice(std::vector<Queue>& deviceQueues, PhysicalDevice phyisicalDevice) {
     VkDeviceCreateInfo createInfo{};
     VkPhysicalDeviceFeatures features{};
 
-    VkDeviceQueueCreateInfo queueCreateInfo; // TODO: currently only a single compute queue is created
-    float priority = 1;
-    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfo.queueCount = 1;
-    queueCreateInfo.queueFamilyIndex = 0; // TODO
-    queueCreateInfo.pQueuePriorities = &priority;
+    if (!assignQueues(phyisicalDevice.queueFamilyProperties, deviceQueues)) {
+        throw runtime_error(format("failed to assign the required queues to {} queue families", phyisicalDevice.properties.deviceName));
+    }
+
+    std::map<uint32_t, uint32_t> familyCount;
+    for (auto& q : deviceQueues) {
+        familyCount[q.family]++;
+    }
+    std::vector<float> queuePriorities(deviceQueues.size(), 1.0f);
+
+    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+    queueCreateInfos.reserve(familyCount.size());
+
+    for (const auto& [familyIndex, count] : familyCount) {
+        VkDeviceQueueCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        info.queueFamilyIndex = familyIndex;
+        info.queueCount = count;
+        info.pQueuePriorities = queuePriorities.data();
+
+        queueCreateInfos.push_back(info);
+    }
 
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    createInfo.pQueueCreateInfos = &queueCreateInfo;
-    createInfo.queueCreateInfoCount = 1;
+    createInfo.pQueueCreateInfos = queueCreateInfos.data();
+    createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
     createInfo.enabledExtensionCount = static_cast<uint32_t>(requiredDeviceExtensions.size());
     createInfo.ppEnabledExtensionNames = requiredDeviceExtensions.data();
     createInfo.pEnabledFeatures = &features;
 
-    auto result = vkCreateDevice(logicalDevice.physicalDevice, &createInfo, nullptr, &logicalDevice.device);
+    VkDevice handle;
+    auto result = vkCreateDevice(phyisicalDevice.handle, &createInfo, nullptr, &handle);
     if (result != VK_SUCCESS) {
         throw runtime_error("failed to create a device");
     }
 
-    vkGetDeviceQueue(logicalDevice.device, 0, 0, &computeQueue.handle);
-    computeQueue.family = 0;
-    computeQueue.index = 0;
+    for (auto& q : deviceQueues) {
+        vkGetDeviceQueue(handle, q.family, q.index, &q.handle);
+    }
 
-    stringstream buffer;
-    buffer << "compute queue handle: " << computeQueue.handle;
-    logger.debug(buffer.str());
+    return Device(handle, phyisicalDevice);
 }
 
 VulkanWindow* VulkanBackend::createWindow(std::string title, int width, int height) {
-    auto window = new VulkanWindow(instance, title, width, height);
+    auto window = new VulkanWindow(instance, std::move(title), width, height);
     windows.push_back(window);
     return window;
 }
@@ -404,7 +461,7 @@ void VulkanBackend::cleanUp() {
     // for (const auto& shader : shaders) {
     //     vkDestroyShaderModule(logicalDevice.device, shader.handle, nullptr);
     // }
-    vkDestroyDevice(logicalDevice.device, nullptr);
+    vkDestroyDevice(logicalDevice.handle, nullptr);
 
     PFN_vkDestroyDebugUtilsMessengerEXT messengerDestroyFunc =
         (PFN_vkDestroyDebugUtilsMessengerEXT)(vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
@@ -461,10 +518,10 @@ VkBool32 VulkanBackend::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT mes
     return VK_FALSE;
 }
 
-int32_t VulkanBackend::getSuitableMemoryType(LogicalDevice& logicalDevice, VkMemoryPropertyFlags requiredFlags) {
-    if (logicalDevice.device == NULL || logicalDevice.physicalDevice == NULL) return -1;
-    for (int i = 0; i < logicalDevice.memoryProperties.memoryTypeCount; i++) {
-        auto& type = logicalDevice.memoryProperties.memoryTypes[i];
+int32_t VulkanBackend::getSuitableMemoryType(Device& logicalDevice, VkMemoryPropertyFlags requiredFlags) {
+    if (logicalDevice.handle == VK_NULL_HANDLE || logicalDevice.phyisicalDevice.handle == VK_NULL_HANDLE) return -1;
+    for (int i = 0; i < logicalDevice.phyisicalDevice.memoryProperties.memoryTypeCount; i++) {
+        auto& type = logicalDevice.phyisicalDevice.memoryProperties.memoryTypes[i];
 
         if ((requiredFlags & type.propertyFlags) == requiredFlags) {
             return i;
@@ -492,27 +549,27 @@ std::optional<MemoryBlock> VulkanBackend::allocateMemory(size_t size) {
     allocateInfo.memoryTypeIndex = typeIndex;
 
     VkDeviceMemory memoryHandle;
-    if (vkAllocateMemory(logicalDevice.device, &allocateInfo, nullptr, &memoryHandle) != VK_SUCCESS) {
+    if (vkAllocateMemory(logicalDevice.handle, &allocateInfo, nullptr, &memoryHandle) != VK_SUCCESS) {
         logger.error(format("failed to allocate memory of size {}", size));
         return std::nullopt;
     }
 
     return MemoryBlock(memoryHandle, requiredProperties, typeIndex);
 }
-void VulkanBackend::downloadFromMemory(MemoryBlock block, void* dst, size_t size, size_t offset) {
+void VulkanBackend::downloadFromMemory(MemoryBlock& block, void* dst, size_t size, size_t offset) {
     void* mappedMemory;
-    vkMapMemory(logicalDevice.device, block.handle, offset, size, 0, &mappedMemory);
+    vkMapMemory(logicalDevice.handle, block.handle, offset, size, 0, &mappedMemory);
     memcpy(dst, mappedMemory, size);
-    vkUnmapMemory(logicalDevice.device, block.handle);
+    vkUnmapMemory(logicalDevice.handle, block.handle);
 }
-void VulkanBackend::uploadToMemory(MemoryBlock block, void* src, size_t size, size_t offset) {
+void VulkanBackend::uploadToMemory(MemoryBlock& block, void* src, size_t size, size_t offset) {
     void* mappedMemory;
-    vkMapMemory(logicalDevice.device, block.handle, offset, size, 0, &mappedMemory);
+    vkMapMemory(logicalDevice.handle, block.handle, offset, size, 0, &mappedMemory);
     memcpy(mappedMemory, src, size);
-    vkUnmapMemory(logicalDevice.device, block.handle);
+    vkUnmapMemory(logicalDevice.handle, block.handle);
 }
-void VulkanBackend::cleanUpMemoryBlock(MemoryBlock block) {
-    vkFreeMemory(logicalDevice.device, block.handle, nullptr);
+void VulkanBackend::cleanUpMemoryBlock(MemoryBlock& block) {
+    vkFreeMemory(logicalDevice.handle, block.handle, nullptr);
 }
 
 //    +----------------------------------------------------+
@@ -528,52 +585,36 @@ std::optional<Shader> VulkanBackend::createShader(const char* filePath) {
     createInfo.pCode = reinterpret_cast<uint32_t*>(code.data());
 
     VkShaderModule handle;
-    if (vkCreateShaderModule(logicalDevice.device, &createInfo, nullptr, &handle) != VK_SUCCESS) {
+    if (vkCreateShaderModule(logicalDevice.handle, &createInfo, nullptr, &handle) != VK_SUCCESS) {
         logger.error(format("failed to make a shader module from \"{}\"", filePath));
         return std::nullopt;
     }
 
     return Shader(handle);
 }
-void VulkanBackend::cleanUpShader(Shader shader) {
-    vkDestroyShaderModule(logicalDevice.device, shader.handle, nullptr);
+void VulkanBackend::cleanUpShader(Shader& shader) {
+    vkDestroyShaderModule(logicalDevice.handle, shader.handle, nullptr);
 }
 
 //    +----------------------------------------------------+
 //    |                       buffers                      |
 //    +----------------------------------------------------+
 
-std::optional<Buffer> VulkanBackend::createBuffer(size_t size, BufferType type, MemoryBlock block, size_t offset) {
-
+std::optional<Buffer> VulkanBackend::createBuffer(size_t size, BufferType type, MemoryBlock& block, size_t offset) {
     VkBufferCreateInfo bufferCreateInfo{};
     bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferCreateInfo.size = size;
     bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    switch (type) {
-    case VERTEX:
-        bufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-        break;
-    case INDEX:
-        bufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-        break;
-    case R_BUFFER:
-        bufferCreateInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        break;
-    case RW_BUFFER:
-        bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        break;
-    default:
-        break;
-    }
+    bufferCreateInfo.usage = type;
 
     VkBuffer bufferHandle;
-    if (vkCreateBuffer(logicalDevice.device, &bufferCreateInfo, nullptr, &bufferHandle) != VK_SUCCESS) {
+    if (vkCreateBuffer(logicalDevice.handle, &bufferCreateInfo, nullptr, &bufferHandle) != VK_SUCCESS) {
         logger.errorf("failed to create buffer of size {}", size);
         return std::nullopt;
     }
 
     VkMemoryRequirements memoryRequirements;
-    vkGetBufferMemoryRequirements(logicalDevice.device, bufferHandle, &memoryRequirements);
+    vkGetBufferMemoryRequirements(logicalDevice.handle, bufferHandle, &memoryRequirements);
 
     logger.debugf("buffer memory requirements:\n\tsize: {}\n\talignment:{}\n\ttypes:{}", memoryRequirements.size, memoryRequirements.alignment,
                   memoryRequirements.memoryTypeBits);
@@ -583,7 +624,7 @@ std::optional<Buffer> VulkanBackend::createBuffer(size_t size, BufferType type, 
         return std::nullopt;
     }
 
-    if (vkBindBufferMemory(logicalDevice.device, bufferHandle, block.handle, offset) != VK_SUCCESS) {
+    if (vkBindBufferMemory(logicalDevice.handle, bufferHandle, block.handle, offset) != VK_SUCCESS) {
         logger.error("failed to bind buffer memory");
         return std::nullopt;
     }
@@ -591,46 +632,13 @@ std::optional<Buffer> VulkanBackend::createBuffer(size_t size, BufferType type, 
     return Buffer(bufferHandle, memoryRequirements.size);
     ;
 }
-void VulkanBackend::cleanUpBuffer(Buffer buffer) {
-    vkDestroyBuffer(logicalDevice.device, buffer.handle, nullptr);
+void VulkanBackend::cleanUpBuffer(Buffer& buffer) {
+    vkDestroyBuffer(logicalDevice.handle, buffer.handle, nullptr);
 }
 
-std::optional<PipeLine> VulkanBackend::createComputePipeline(Shader computeShader, PipelineLayout layout) {
-    VkPipelineShaderStageCreateInfo shaderStageCreateInfo{};
-    shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-    shaderStageCreateInfo.module = computeShader.handle;
-    shaderStageCreateInfo.pName = "main";
-
-    VkComputePipelineCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-    createInfo.stage = shaderStageCreateInfo;
-    createInfo.layout = layout.handle;
-
-    VkPipeline handle;
-    if (vkCreateComputePipelines(logicalDevice.device, nullptr, 1, &createInfo, nullptr, &handle) != VK_SUCCESS) {
-        logger.error("failed to create compute pipeline");
-        return std::nullopt;
-    }
-
-    return PipeLine(handle);
-}
-
-std::optional<PipelineLayout> VulkanBackend::createPipelineLayout(uint32_t descriptorSetCount, DescriptorSetLayout* pDescriptorSetLayouts) {
-    VkPipelineLayoutCreateInfo layoutCreateInfo{};
-    layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutCreateInfo.setLayoutCount = descriptorSetCount;
-    layoutCreateInfo.pSetLayouts = pDescriptorSetLayouts;
-    layoutCreateInfo.pushConstantRangeCount = 0;
-
-    VkPipelineLayout handle;
-    if (vkCreatePipelineLayout(logicalDevice.device, &layoutCreateInfo, nullptr, &handle) != VK_SUCCESS) {
-        logger.error("failed to create pipeline layout");
-        return std::nullopt;
-    }
-
-    return PipelineLayout(handle);
-}
+//    +----------------------------------------------------+
+//    |                     descriptors                    |
+//    +----------------------------------------------------+
 
 std::optional<DescriptorSetLayout> VulkanBackend::createDescriptorSetLayout(VkDescriptorSetLayoutBinding* bindings, uint32_t bindingCount) {
     VkDescriptorSetLayoutCreateInfo createInfo{};
@@ -639,7 +647,7 @@ std::optional<DescriptorSetLayout> VulkanBackend::createDescriptorSetLayout(VkDe
     createInfo.pBindings = bindings;
 
     VkDescriptorSetLayout handle;
-    if (vkCreateDescriptorSetLayout(logicalDevice.device, &createInfo, nullptr, &handle) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(logicalDevice.handle, &createInfo, nullptr, &handle) != VK_SUCCESS) {
         logger.error("failed to create the descriptor set layout");
         return std::nullopt;
     }
@@ -647,9 +655,8 @@ std::optional<DescriptorSetLayout> VulkanBackend::createDescriptorSetLayout(VkDe
     return DescriptorSetLayout(handle);
 }
 void VulkanBackend::cleanUpDescriptorSetLayout(DescriptorSetLayout layout) {
-    vkDestroyDescriptorSetLayout(logicalDevice.device, layout, nullptr);
+    vkDestroyDescriptorSetLayout(logicalDevice.handle, layout, nullptr);
 }
-
 std::optional<DescriptorPool> VulkanBackend::createDescriptorSetPool(std::map<VkDescriptorType, uint32_t> resourceCount, uint32_t maxSets) {
     std::vector<VkDescriptorPoolSize> poolSizes;
     poolSizes.reserve(resourceCount.size());
@@ -665,7 +672,7 @@ std::optional<DescriptorPool> VulkanBackend::createDescriptorSetPool(std::map<Vk
 
     VkDescriptorPool handle;
 
-    if (vkCreateDescriptorPool(logicalDevice.device, &createInfo, nullptr, &handle) != VK_SUCCESS) {
+    if (vkCreateDescriptorPool(logicalDevice.handle, &createInfo, nullptr, &handle) != VK_SUCCESS) {
         logger.error("failed to create descriptor pool");
         return std::nullopt;
     }
@@ -673,9 +680,8 @@ std::optional<DescriptorPool> VulkanBackend::createDescriptorSetPool(std::map<Vk
     return DescriptorPool(handle);
 }
 void VulkanBackend::cleanUpcreateDescriptorSetPool(DescriptorPool layout) {
-    vkDestroyDescriptorPool(logicalDevice.device, layout.handle, nullptr);
+    vkDestroyDescriptorPool(logicalDevice.handle, layout.handle, nullptr);
 }
-
 bool VulkanBackend::allocateDescriptorSets(DescriptorPool pool, uint32_t count, DescriptorSetLayout* pLayouts, DescriptorSet* pDescriptorSets) {
     VkDescriptorSetAllocateInfo allocationInfo{};
     allocationInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -683,33 +689,78 @@ bool VulkanBackend::allocateDescriptorSets(DescriptorPool pool, uint32_t count, 
     allocationInfo.descriptorPool = pool.handle;
     allocationInfo.pSetLayouts = pLayouts;
 
-    if (vkAllocateDescriptorSets(logicalDevice.device, &allocationInfo, pDescriptorSets) != VK_SUCCESS) {
+    if (vkAllocateDescriptorSets(logicalDevice.handle, &allocationInfo, pDescriptorSets) != VK_SUCCESS) {
         logger.error("failed to allocate descriptor sets");
         return false;
     }
 
     return true;
 }
-
 void VulkanBackend::updateDescriptorSets(std::vector<VkWriteDescriptorSet> writes, std::vector<VkCopyDescriptorSet> copies) {
-    vkUpdateDescriptorSets(logicalDevice.device, static_cast<uint32_t>(writes.size()), writes.data(), static_cast<uint32_t>(copies.size()),
+    vkUpdateDescriptorSets(logicalDevice.handle, static_cast<uint32_t>(writes.size()), writes.data(), static_cast<uint32_t>(copies.size()),
                            copies.data());
 }
 
-optional<CommandPool> VulkanBackend::createCommandPool() {
+//    +----------------------------------------------------+
+//    |                      pipelines                     |
+//    +----------------------------------------------------+
+
+std::optional<PipelineLayout> VulkanBackend::createPipelineLayout(uint32_t descriptorSetCount, DescriptorSetLayout* pDescriptorSetLayouts,
+                                                                  uint32_t pushConstantRangesCount, VkPushConstantRange* pPushConstantRanges) {
+    VkPipelineLayoutCreateInfo layoutCreateInfo{};
+    layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutCreateInfo.setLayoutCount = descriptorSetCount;
+    layoutCreateInfo.pSetLayouts = pDescriptorSetLayouts;
+    layoutCreateInfo.pushConstantRangeCount = pushConstantRangesCount;
+    layoutCreateInfo.pPushConstantRanges = pPushConstantRanges;
+
+    VkPipelineLayout handle;
+    if (vkCreatePipelineLayout(logicalDevice.handle, &layoutCreateInfo, nullptr, &handle) != VK_SUCCESS) {
+        logger.error("failed to create pipeline layout");
+        return std::nullopt;
+    }
+
+    return PipelineLayout(handle);
+}
+std::optional<PipeLine> VulkanBackend::createComputePipeline(Shader& computeShader, PipelineLayout& layout) {
+    VkPipelineShaderStageCreateInfo shaderStageCreateInfo{};
+    shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    shaderStageCreateInfo.module = computeShader.handle;
+    shaderStageCreateInfo.pName = "main";
+
+    VkComputePipelineCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    createInfo.stage = shaderStageCreateInfo;
+    createInfo.layout = layout.handle;
+
+    VkPipeline handle;
+    if (vkCreateComputePipelines(logicalDevice.handle, nullptr, 1, &createInfo, nullptr, &handle) != VK_SUCCESS) {
+        logger.error("failed to create compute pipeline");
+        return std::nullopt;
+    }
+
+    return PipeLine(handle);
+}
+
+//    +----------------------------------------------------+
+//    |                   command buffers                  |
+//    +----------------------------------------------------+
+
+optional<CommandPool> VulkanBackend::createCommandPool(Queue& queue) {
     VkCommandPoolCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    createInfo.queueFamilyIndex = computeQueue.family;
+    createInfo.queueFamilyIndex = queue.family;
 
     VkCommandPool handle;
-    if (vkCreateCommandPool(logicalDevice.device, &createInfo, nullptr, &handle) != VK_SUCCESS) {
+    if (vkCreateCommandPool(logicalDevice.handle, &createInfo, nullptr, &handle) != VK_SUCCESS) {
         logger.error("failed to create command pool");
         return nullopt;
     }
 
     return CommandPool(handle);
 }
-optional<CommandBuffer> VulkanBackend::allocateCommandBuffer(CommandPool pool) {
+optional<CommandBuffer> VulkanBackend::allocateCommandBuffer(CommandPool& pool) {
     VkCommandBuffer handle;
 
     VkCommandBufferAllocateInfo allocationInfo{};
@@ -718,26 +769,26 @@ optional<CommandBuffer> VulkanBackend::allocateCommandBuffer(CommandPool pool) {
     allocationInfo.commandBufferCount = 1; // TODO
     allocationInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 
-    if (vkAllocateCommandBuffers(logicalDevice.device, &allocationInfo, &handle) != VK_SUCCESS) {
+    if (vkAllocateCommandBuffers(logicalDevice.handle, &allocationInfo, &handle) != VK_SUCCESS) {
         logger.error("failed to allocate command buffers");
         return nullopt;
     }
 
     return CommandBuffer(handle);
 }
-bool VulkanBackend::submitAndSynchronize(CommandBuffer commandBuffer) {
+bool VulkanBackend::submitAndSynchronize(CommandBuffer commandBuffer, Queue& queue) {
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer.handle;
 
-    if (vkQueueSubmit(computeQueue.handle, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+    if (vkQueueSubmit(queue.handle, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
         logger.error("Failed to submit compute command buffer!");
         return false;
     }
 
     // Wait for the queue to finish executing the submitted commands
-    if (vkQueueWaitIdle(computeQueue.handle) != VK_SUCCESS) {
+    if (vkQueueWaitIdle(queue.handle) != VK_SUCCESS) {
         logger.error("Failed to wait for queue to become idle!");
         return false;
     }

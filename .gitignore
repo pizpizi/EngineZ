@@ -1,3 +1,4 @@
 build
 journal
 .cache
+.venv/

@@ -20,10 +20,12 @@ namespace enginez::graphics {
     };
 
     typedef VkDescriptorSetLayout DescriptorSetLayout;
+    typedef VkDescriptorSetLayoutBinding DescriptorSetLayoutBinding;
     typedef VkDescriptorSet DescriptorSet;
     struct DescriptorPool {
         DescriptorPool(VkDescriptorPool handle) : handle(handle) {
         }
         VkDescriptorPool handle;
     };
+    typedef VkPushConstantRange PushConstantRange ;
 } // namespace enginez::graphics

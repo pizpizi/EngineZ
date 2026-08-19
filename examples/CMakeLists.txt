@@ -1,3 +1,2 @@
-link_libraries(enginez)
-
-add_executable(main main.cpp)
+add_executable(compute_example compute_example.cpp)
+target_link_libraries(compute_example PRIVATE enginez)

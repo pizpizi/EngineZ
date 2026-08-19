@@ -19,6 +19,9 @@ namespace enginez::graphics {
       private:
         logz::DefaultLogger& logger;
 
+        VkSwapchainKHR swapchain;
+        VkSurfaceKHR surface;
+
         int width, height;
         std::string title;
 

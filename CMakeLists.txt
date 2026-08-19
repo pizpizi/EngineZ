@@ -1,20 +1,26 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.1)
+project(EngineZ)
 
-project("EngineZ")
-option(ENGINEZ_BUILD_EXAMPLES "Build engine examples" OFF)
+option(BUILD_EXAMPLES "Build engine examples" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_subdirectory("${CMAKE_SOURCE_DIR}/dependencies/glfw")
-add_subdirectory("${CMAKE_SOURCE_DIR}/dependencies/logz")
+
+add_subdirectory(dependencies/glfw)
+add_subdirectory(dependencies/logz)
 find_package(Vulkan REQUIRED)
 
-add_library(enginez src/engine.cpp src/vulkan/vulkan_utilities.cpp src/vulkan/vulkan_backend.cpp src/vulkan/vulkan_window)
+add_library(enginez 
+    src/engine.cpp
+    src/vulkan/vulkan_utilities.cpp
+    src/vulkan/vulkan_backend.cpp
+    src/vulkan/vulkan_window
+)
 
 target_include_directories(enginez
-    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
-    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
+    PUBLIC include
+    PRIVATE src
 )
 
 target_link_libraries(enginez
@@ -24,6 +30,6 @@ target_link_libraries(enginez
         logz
 )
 
-if(ENGINEZ_BUILD_EXAMPLES)
+if(BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()

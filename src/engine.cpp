@@ -12,7 +12,7 @@ Engine::Engine(EngineCreateInfo createInfo) {
     setupLogger();
 
     logger.info("setup the main logger");
-    graphicsBackend = std::make_unique<graphics::VulkanBackend>();
+    // graphicsBackend = std::make_unique<graphics::VulkanBackend>(createInfo.deviceQueues);
 }
 
 void Engine::setupLogger(){
@@ -23,7 +23,7 @@ void Engine::setupLogger(){
 }
 
 void Engine::init() {
-    graphicsBackend->init();
+    // graphicsBackend->init();
 }
 
 void Engine::cleanUp() {
@@ -38,7 +38,7 @@ void Engine::loop(){
     uint64_t count = 0;
 
     while (true){
-        graphicsBackend->update();
+        // graphicsBackend->update();
         count++;
         frameTime = chrono::high_resolution_clock::now() - startTime;
         if(frameTime.count() > 1000000000){

@@ -2,10 +2,12 @@
 #include "logz/logger.hpp"
 #include "graphics/vulkan_backend.hpp"
 #include <memory>
+#include <vector>
 
 namespace enginez {
 
     struct EngineCreateInfo {
+      std::vector<graphics::Queue>& deviceQueues;
     };
     
     class Engine {
