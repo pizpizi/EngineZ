@@ -78,5 +78,17 @@
         "set": "cpp",
         "span": "cpp",
         "xtree": "cpp"
+    },
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true,
+        "**.cache": true,
+        "**/.venv":true,
+        "build": true,
+        // "dependencies": true,
+        "old": true
     }
 }
