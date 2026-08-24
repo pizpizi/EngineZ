@@ -800,7 +800,7 @@ expected<PipelineLayout, err::Code> ezVulkanBackend::createPipelineLayout(
 
     return expected<PipelineLayout, err::Code> {handle};
 }
-std::optional<PipeLine> ezVulkanBackend::createComputePipeline(Shader& computeShader, PipelineLayout& layout) {
+expected<PipeLine, err::Code> ezVulkanBackend::createComputePipeline(Shader& computeShader, PipelineLayout& layout) {
     VkPipelineShaderStageCreateInfo shaderStageCreateInfo {};
     shaderStageCreateInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shaderStageCreateInfo.stage  = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -815,10 +815,10 @@ std::optional<PipeLine> ezVulkanBackend::createComputePipeline(Shader& computeSh
     VkPipeline handle;
     if (vkCreateComputePipelines(device.handle, nullptr, 1, &createInfo, nullptr, &handle) != VK_SUCCESS) {
         logger.error("failed to create compute pipeline");
-        return std::nullopt;
+        return std::unexpected<err::Code>(err::Code::PIPELINE_CREATION_FAILED);
     }
 
-    return PipeLine(handle);
+    return expected<PipeLine, err::Code> {{handle, layout}};
 }
 std::optional<PipeLine> ezVulkanBackend::createGraphicsPipeline(Shader frag, Shader vert) {
     // ----------- shader CIs ----------- //

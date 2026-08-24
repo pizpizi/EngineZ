@@ -102,16 +102,11 @@ namespace enginez::graphics {
 //    +----------------------------------------------------+
 //    |                      Pipelines                     |
 //    +----------------------------------------------------+
-    struct PipeLine {
-        VkPipeline handle;
-    };
-    struct PipelineLayout {
-        VkPipelineLayout handle;
-    };
     struct Shader {
         VkShaderModule handle;
     };
 
+    typedef VkPushConstantRange PushConstantRange;
     typedef VkDescriptorSetLayout DescriptorSetLayout;
     typedef VkDescriptorSetLayoutBinding DescriptorSetLayoutBinding;
     typedef VkDescriptorSet DescriptorSet;
@@ -124,7 +119,15 @@ namespace enginez::graphics {
 		VkDescriptorType type;
 		float ratio;
     };
-    typedef VkPushConstantRange PushConstantRange;
+    struct PipelineLayout {
+        VkPipelineLayout handle;
+        std::vector<DescriptorSet> sets;
+        std::vector<PushConstantRange> pushConstantRanges;
+    };
+    struct PipeLine {
+        VkPipeline handle;
+        PipelineLayout layout;
+    };
 
 //    +----------------------------------------------------+
 //    |                   Synchronization                  |

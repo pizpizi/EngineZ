@@ -21,7 +21,7 @@ def compile_shaders():
 
             print(f"Compiling {f.name}...")
 
-        subprocess.run(["glslc", "-o", str(output_file), str(f.absolute())])
+            subprocess.run(["glslc", "-o", str(output_file), str(f.absolute())])
 
 if __name__ == "__main__":
     compile_shaders()

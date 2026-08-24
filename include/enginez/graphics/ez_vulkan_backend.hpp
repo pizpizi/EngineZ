@@ -92,7 +92,7 @@ namespace enginez::graphics {
             VkPushConstantRange* pPushConstantRanges
         );
         std::optional<PipeLine> createGraphicsPipeline(Shader frag, Shader vert);
-        std::optional<PipeLine> createComputePipeline(Shader& computeShader, PipelineLayout& layout);
+        std::expected<PipeLine, err::Code> createComputePipeline(Shader& computeShader, PipelineLayout& layout);
         // ---------------------------------- //
 
         // -------------- sync -------------- //

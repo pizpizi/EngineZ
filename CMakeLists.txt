@@ -9,6 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_subdirectory(dependencies/glfw)
 add_subdirectory(dependencies/logz)
+add_subdirectory(dependencies/glm)
 add_subdirectory(dependencies/imgui)
 
 add_library(enginez 
@@ -32,6 +33,7 @@ target_link_libraries(enginez
         glfw
         logz
         imgui
+        glm
 )
 
 target_compile_features(enginez PUBLIC cxx_std_23)
