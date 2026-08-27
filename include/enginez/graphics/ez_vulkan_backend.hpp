@@ -2,7 +2,6 @@
 
 #include "enginez/graphics/ez_error.hpp"
 #include "ez_types.hpp"
-#include "ez_window.hpp"
 #include "logz/logger.hpp"
 #include <cstdint>
 #include <expected>
@@ -15,6 +14,7 @@ namespace enginez {
     class ezEngine;
 }
 namespace enginez::graphics {
+    class ezWindow;
 
     class ezVulkanBackend {
         friend ezWindow;
@@ -101,7 +101,7 @@ namespace enginez::graphics {
         // ---------------------------------- //
 
         // ------------- images ------------- //
-        static void transitionImage(VkImage image, VkImageLayout src, VkImageLayout dst);
+        
         // ---------------------------------- //
 
         bool submitAndSynchronize(CommandBuffer commandBuffer, Queue& queue);
@@ -111,8 +111,7 @@ namespace enginez::graphics {
         logz::DefaultLogger& validationLayerLogger = logz::createDefaultLogger(logz::SINCE_PROGRAM_START, "Validation Layer");
 
         std::vector<const char*> requiredDeviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-        std::map<VkQueueFlagBits, uint8_t> requiredQueues = {{VK_QUEUE_COMPUTE_BIT, 1}};
-
+        
         std::vector<MemoryBlock> memoryBlocks;
         std::vector<Shader> shaders;
         std::vector<Buffer> buffers;

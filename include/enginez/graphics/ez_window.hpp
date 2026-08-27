@@ -1,21 +1,18 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 #define GLFW_INCLUDE_VULKAN
 
 #include "GLFW/glfw3.h"
 #include "enginez/graphics/ez_types.hpp"
 #include "logz/logger.hpp"
 #include "vulkan/vulkan_core.h"
-#include <expected>
 #include <string>
-
-namespace enginez {
-    class ezEngine;
-}
+#include "enginez/ez_engine.hpp"
+#include "enginez/graphics/ez_vulkan_backend.hpp"
 
 namespace enginez::graphics {
-    class ezVulkanBackend;
 
     struct ezWindowCreateInfo {
         Queue graphicsQueue;
@@ -33,12 +30,13 @@ namespace enginez::graphics {
             CommandPool commandPool;
             CommandBuffer commandBuffer;
 
-            Semaphore swapchainSemaphore, renderSemaphore;
+            Semaphore swapchainSemaphore;
             Fence renderFence;
         };
 
       public:
-        static inline const int FRAMES_IN_FLY = 2;
+        static inline const int FRAMES_IN_FLY = 1;
+        static inline const VkExtent3D DRAW_IMAGE_EXTENT = {1920, 1200, 1};
 
         ezWindow(ezWindowCreateInfo& createInfo);
         void cleanUp();
@@ -52,7 +50,14 @@ namespace enginez::graphics {
         void setTitle(std::string val);
         bool isClosed();
 
+        bool shouldResize = false;
+        bool inResizeFrame = false;
+        uint32_t resizeCounter = 0;
+
       private:
+        static void resizeStatic(GLFWwindow* window, int width, int height);
+        static void cursorPosStatic(GLFWwindow* window, double xpos, double ypos);
+        void resize();
         void internalUpdate();
         void init(ezVulkanBackend* backend);
 
@@ -64,6 +69,8 @@ namespace enginez::graphics {
         void setupFrameData();
         void setupDrawImage();
         void setupImgui();
+        void setupCallbacks();
+        void assignDebugNames();
         VkSurfaceFormatKHR getSuitableFormat(std::vector<VkSurfaceFormatKHR>& formats);
         VkPresentModeKHR choosePresentMode(std::vector<VkPresentModeKHR>& modes);
         VkExtent2D chooseSwapExtent(VkSurfaceCapabilitiesKHR& surfaceCapabilities);
@@ -72,15 +79,23 @@ namespace enginez::graphics {
         VkRenderingAttachmentInfo colorAttchInfo;
 
         FrameData frameData[FRAMES_IN_FLY];
+        std::vector<VkSemaphore> renderSemaphores;
         std::vector<VkImage> swapchainImages;
 
       protected:
+        virtual void onMouseMoved(double xpos, double ypos){};
+        virtual void onMouseDown(){};
+
+
         int currentFrame = 0;
         FrameData* currentFrameData;
-        Image image;
+        VkSemaphore renderSemaphore;
+        Image drawImage;
         
         ezEngine& engine;
         ezVulkanBackend& backend;
+        VmaAllocator& allocator;
+
         VkInstance& instance;
         Device& device;
 
@@ -91,13 +106,16 @@ namespace enginez::graphics {
         VkSurfaceKHR surface;
         VkExtent2D swapchainExtent;
         VkFormat swapchainFormat;
-        uint32_t width, height;
+        VkColorSpaceKHR swapchainColorSpace;
+        VkPresentModeKHR presentMode;
         std::string title;
 
         GLFWwindow* glfwWindow;
 
         Queue graphicsQueue;
         Queue presentQueue;
+
+        std::vector<uint32_t> familyIndexes;
     };
 
 } // namespace enginez::graphics

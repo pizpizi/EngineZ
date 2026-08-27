@@ -7,7 +7,7 @@
 #include "enginez/graphics/ez_vulkan_backend.hpp"
 #include "enginez/graphics/ez_window.hpp"
 #include "logz/logger.hpp"
-#include "utils/utilities.hpp"
+#include "enginez/utils/utilities.hpp"
 #include "vma/vk_mem_alloc.h"
 #include <X11/X.h>
 #include <cstddef>
@@ -208,8 +208,8 @@ PhysicalDevice ezVulkanBackend::choosePhysicalDevice(std::vector<Queue> deviceQu
         // ---------------------------------------------------------------- //
 
         // ---------------------------- scoring --------------------------- //
-        bool hasExtensions         = true;
-        bool isDescrete            = false;
+        bool hasExtensions = true;
+        bool isDescrete    = false;
 
         if (properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) isDescrete = true;
         for (auto& ext : requiredDeviceExtensions) {
@@ -356,8 +356,8 @@ PhysicalDevice ezVulkanBackend::choosePhysicalDevice(std::vector<Queue> deviceQu
 }
 bool ezVulkanBackend::assignQueues(PhysicalDevice& physicalDevice, std::vector<Queue>& queues) {
     auto& queueFamilyProperties = physicalDevice.queueFamilyProperties;
-    uint32_t familyNum = queueFamilyProperties.size();
-    uint32_t queueNum  = queues.size();
+    uint32_t familyNum          = queueFamilyProperties.size();
+    uint32_t queueNum           = queues.size();
 
     vector<uint32_t> filled;
     filled.resize(familyNum);
@@ -389,11 +389,12 @@ bool ezVulkanBackend::assignQueues(PhysicalDevice& physicalDevice, std::vector<Q
         bool found = false;
         for (int i = queues[assigned].family; i < familyNum; i++) {
             if (filled[i] == queueFamilyProperties[i].queueCount) continue;
-            if(queues[assigned].type == PRESENT){
+            if (queues[assigned].type == PRESENT) {
                 VkBool32 supported;
                 vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice.handle, i, tmpSurface, &supported);
-                if(!supported) continue;
-            } else if (!(queueFamilyProperties[i].queueFlags & queues[assigned].type)) continue;
+                if (!supported) continue;
+            } else if (!(queueFamilyProperties[i].queueFlags & queues[assigned].type))
+                continue;
 
             queues[assigned].family = i;
             queues[assigned].index  = filled[i];
@@ -482,8 +483,8 @@ Device ezVulkanBackend::setupLogicalDevice(std::vector<Queue>& deviceQueues, Phy
     log << "Setup the logical device:\n";
     log << "\tchosen physical device: " << phyisicalDevice.properties.deviceName << "\n";
     log << "\tqueues:\n";
-    for(auto& q : deviceQueues){
-        log << "\t\t" << string_QueueType(q.type) << " (" << q.family << ":" << q.index <<")\n";
+    for (auto& q : deviceQueues) {
+        log << "\t\t" << string_QueueType(q.type) << " (" << q.family << ":" << q.index << ")\n";
     }
     logger.debug(log.str());
     log.clear();
@@ -751,12 +752,13 @@ std::expected<DescriptorPool, err::Code> ezVulkanBackend::createDescriptorSetPoo
         return std::unexpected(err::Code::DESCRIPTOR_POOL_CREATION_FAILED);
     }
 
-    return expected<DescriptorPool, err::Code>{handle};
+    return expected<DescriptorPool, err::Code> {handle};
 }
 void ezVulkanBackend::cleanUpcreateDescriptorSetPool(DescriptorPool layout) {
     vkDestroyDescriptorPool(device.handle, layout.handle, nullptr);
 }
-err::Code ezVulkanBackend::allocateDescriptorSets(DescriptorPool pool, uint32_t count, DescriptorSetLayout* pLayouts, DescriptorSet* pDescriptorSets) {
+err::Code
+ezVulkanBackend::allocateDescriptorSets(DescriptorPool pool, uint32_t count, DescriptorSetLayout* pLayouts, DescriptorSet* pDescriptorSets) {
     VkDescriptorSetAllocateInfo allocationInfo {};
     allocationInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocationInfo.descriptorSetCount = count;
@@ -969,7 +971,11 @@ optional<CommandBuffer> ezVulkanBackend::allocateCommandBuffer(CommandPool& pool
 //    +----------------------------------------------------+
 
 std::optional<Semaphore> ezVulkanBackend::createSemaphore() {
-    VkSemaphoreCreateInfo CI {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, .pNext = nullptr, .flags = 0};
+    VkSemaphoreCreateInfo CI {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+    };
 
     Semaphore semaphore;
     if (vkCreateSemaphore(device.handle, &CI, nullptr, &semaphore) != VK_SUCCESS) {
@@ -1016,24 +1022,7 @@ bool ezVulkanBackend::submitAndSynchronize(CommandBuffer commandBuffer, Queue& q
 //    |                       images                       |
 //    +----------------------------------------------------+
 
-void ezVulkanBackend::transitionImage(VkImage image, VkImageLayout src, VkImageLayout dst) {
-    static VkImageMemoryBarrier2 imageBarrier {
-        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask     = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-        .srcAccessMask    = VK_ACCESS_2_MEMORY_WRITE_BIT,
-        .dstStageMask     = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-        .dstAccessMask    = VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT,
-        .oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout        = VK_IMAGE_LAYOUT_GENERAL,
-        .image            = image,
-        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
-    };
-    static VkDependencyInfo info {
-        .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount = 1,
-        .pImageMemoryBarriers    = &imageBarrier,
-    };
-}
+
 
 void ezVulkanBackend::update() {
     glfwPollEvents();

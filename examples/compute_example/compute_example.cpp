@@ -43,7 +43,7 @@ class TestWindow : public ezWindow {
     };
 
     vector<Effect> effects;
-    uint8_t chosenPipeline;
+    uint8_t chosenPipeline = 0;
 
     void initializePipelines() {
         effects.resize(2);
@@ -79,7 +79,7 @@ class TestWindow : public ezWindow {
 
         VkDescriptorImageInfo imageInfo {
             .sampler     = nullptr,
-            .imageView   = image.view,
+            .imageView   = drawImage.view,
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         };
         VkWriteDescriptorSet write {
@@ -122,7 +122,7 @@ class TestWindow : public ezWindow {
 
         vkCmdPushConstants(cmd, effect.pipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &effect.data);
 
-        vkCmdDispatch(cmd, std::ceil(image.extent.width / 16.f), std::ceil(image.extent.height / 16.f), 1);
+        vkCmdDispatch(cmd, std::ceil(drawImage.extent.width / 16.f), std::ceil(drawImage.extent.height / 16.f), 1);
 
         drawGUI();
     }

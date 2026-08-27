@@ -42,7 +42,7 @@ void ezEngine::loop(){
         count++;
         frameTime = chrono::high_resolution_clock::now() - startTime;
         if(frameTime.count() > 1000000000){
-            logger.info(format("{} frames -> frame time: {}ns", count, 1000000000 / count));
+            // logger.info(format("{} frames -> frame time: {}ns", count, 1000000000 / count));
             count = 0;
             startTime = chrono::high_resolution_clock::now();
         }

@@ -3,6 +3,7 @@
 #include "enginez/ez_engine.hpp"
 #include "enginez/graphics/ez_error.hpp"
 #include "enginez/graphics/ez_types.hpp"
+#include "enginez/utils/utilities.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
@@ -28,11 +29,10 @@ void ezWindow::setupLogger() {
 ezWindow::ezWindow(ezWindowCreateInfo& createInfo)
     : engine(createInfo.engine),
       backend(engine.graphicsBackend),
+      allocator(backend.allocator),
       instance(engine.graphicsBackend.instance),
       device(engine.graphicsBackend.device),
       logger(logz::createDefaultLogger(logz::SINCE_PROGRAM_START, createInfo.title)),
-      width(createInfo.width),
-      height(createInfo.height),
       title(createInfo.title),
       graphicsQueue(createInfo.graphicsQueue),
       presentQueue(createInfo.presentQueue) {
@@ -42,10 +42,31 @@ ezWindow::ezWindow(ezWindowCreateInfo& createInfo)
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
 
-    glfwWindow = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
+    familyIndexes.push_back(graphicsQueue.family);
+    if (presentQueue.family != graphicsQueue.family) familyIndexes.push_back(presentQueue.family);
+
+    glfwWindow = glfwCreateWindow(createInfo.width, createInfo.height, title.c_str(), nullptr, nullptr);
     if (!glfwWindow) {
         throw ezError(err::Code::GLFW_INIT_FAIL, "Failed to initialize the glfw window for window: {}", title);
     }
+
+    glfwSetWindowUserPointer(glfwWindow, this);
+}
+
+void ezWindow::setupCallbacks() {
+    glfwSetCursorPosCallback(glfwWindow, ezWindow::cursorPosStatic);
+    ImGui_ImplGlfw_InstallCallbacks(glfwWindow);
+}
+void ezWindow::assignDebugNames () {
+    setDebugName(device.handle, drawImage.handle, VK_OBJECT_TYPE_IMAGE, "draw_image");
+
+    for (auto i = 0; i < FRAMES_IN_FLY; i++) {
+        setDebugName(device.handle, frameData[i].commandBuffer.handle, VK_OBJECT_TYPE_COMMAND_BUFFER, "frame_{}_cmd", i);
+        setDebugName(device.handle, frameData[i].renderFence, VK_OBJECT_TYPE_FENCE, "frame_{}_fence", i);
+    }
+}
+void ezWindow::cursorPosStatic(GLFWwindow* window, double xpos, double ypos){
+    static_cast<ezWindow*>(glfwGetWindowUserPointer(window))->onMouseMoved(xpos, ypos);
 }
 
 void ezWindow::init(ezVulkanBackend* backend) {
@@ -54,10 +75,11 @@ void ezWindow::init(ezVulkanBackend* backend) {
     setupFrameData();
     setupDrawImage();
     setupImgui();
+    setupCallbacks();
+    assignDebugNames();
 }
 
 void ezWindow::createSurface() {
-
     if (glfwCreateWindowSurface(instance, glfwWindow, nullptr, &surface) != VK_SUCCESS) {
         throw ezError(err::Code::SURFACE_CREATION_FAIL, "Failed to create the surface for window: {}", title);
     }
@@ -65,11 +87,7 @@ void ezWindow::createSurface() {
 }
 
 void ezWindow::setupDrawImage() {
-    VkExtent3D extent;
-    extent.width  = swapchainExtent.width;
-    extent.height = swapchainExtent.height;
-    extent.depth  = 1;
-    image.extent  = extent;
+    drawImage.extent = DRAW_IMAGE_EXTENT;
 
     VkImageUsageFlags usages =
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
@@ -80,7 +98,7 @@ void ezWindow::setupDrawImage() {
         .flags         = 0,
         .imageType     = VK_IMAGE_TYPE_2D,
         .format        = VK_FORMAT_R16G16B16A16_SFLOAT,
-        .extent        = extent,
+        .extent        = DRAW_IMAGE_EXTENT,
         .mipLevels     = 1,
         .arrayLayers   = 1,
         .samples       = VK_SAMPLE_COUNT_1_BIT,
@@ -92,7 +110,7 @@ void ezWindow::setupDrawImage() {
 
     VmaAllocationCreateInfo allocationCI {.usage = VMA_MEMORY_USAGE_GPU_ONLY, .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT};
 
-    auto result = vmaCreateImage(backend.allocator, &imageCI, &allocationCI, &image.handle, &image.allocation, nullptr);
+    auto result = vmaCreateImage(backend.allocator, &imageCI, &allocationCI, &drawImage.handle, &drawImage.allocation, nullptr);
     if (result != VK_SUCCESS) {
         throw ezError(Code::IMAGE_CREATION_FAIL, result, "Failed to create the draw image for window: {}", title);
     }
@@ -101,19 +119,63 @@ void ezWindow::setupDrawImage() {
         .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .pNext            = nullptr,
         .flags            = 0,
-        .image            = image.handle,
+        .image            = drawImage.handle,
         .viewType         = VK_IMAGE_VIEW_TYPE_2D,
         .format           = VK_FORMAT_R16G16B16A16_SFLOAT,
         .components       = {},
         .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
     };
 
-    result = vkCreateImageView(device.handle, &viewCI, nullptr, &image.view);
+    result = vkCreateImageView(device.handle, &viewCI, nullptr, &drawImage.view);
     if (result != VK_SUCCESS) {
         throw ezError(Code::IMAGE_VIEW_CREATION_FAIL, result, "Failed to create the draw image view for window: {}", title);
     }
 
     logger.debugf("Setup the draw image for window: {}", title);
+}
+
+void ezWindow::resizeStatic(GLFWwindow* window, int width, int height) {
+    ezWindow* win     = (ezWindow*)glfwGetWindowUserPointer(window);
+    win->shouldResize = true;
+}
+
+void ezWindow::resize() {
+    vkQueueWaitIdle(graphicsQueue.handle);
+    vkQueueWaitIdle(presentQueue.handle);
+
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.phyisicalDevice.handle, surface, &surfaceCapabilities);
+    swapchainExtent = chooseSwapExtent(surfaceCapabilities);
+
+    auto oldSwapchain = swapchain;
+
+    VkSwapchainCreateInfoKHR createInfo {
+        .sType                 = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .surface               = surface,
+        .minImageCount         = surfaceCapabilities.minImageCount,
+        .imageFormat           = swapchainFormat,
+        .imageColorSpace       = swapchainColorSpace,
+        .imageExtent           = swapchainExtent,
+        .imageArrayLayers      = 1,
+        .imageUsage            = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .imageSharingMode      = familyIndexes.size() > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = static_cast<uint32_t>(familyIndexes.size()),
+        .pQueueFamilyIndices   = familyIndexes.data(),
+        .preTransform          = surfaceCapabilities.currentTransform,
+        .compositeAlpha        = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .presentMode           = presentMode,
+        .clipped               = VK_TRUE,
+        .oldSwapchain          = oldSwapchain
+    };
+
+    vkCreateSwapchainKHR(device.handle, &createInfo, nullptr, &swapchain);
+
+    vkDestroySwapchainKHR(device.handle, oldSwapchain, nullptr);
+    uint32_t swapchainImageCount;
+    vkGetSwapchainImagesKHR(device.handle, swapchain, &swapchainImageCount, nullptr);
+    swapchainImages.resize(swapchainImageCount);
+    vkGetSwapchainImagesKHR(device.handle, swapchain, &swapchainImageCount, swapchainImages.data());
+
+    imguiRenderInfo.renderArea = {.extent = swapchainExtent};
 }
 
 void ezWindow::createSwapchain() {
@@ -184,9 +246,9 @@ void ezWindow::createSwapchain() {
         .imageExtent           = chosenExtent,
         .imageArrayLayers      = 1,
         .imageUsage            = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-        .imageSharingMode      = VK_SHARING_MODE_EXCLUSIVE,
-        .queueFamilyIndexCount = 0,
-        .pQueueFamilyIndices   = nullptr,
+        .imageSharingMode      = familyIndexes.size() > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = static_cast<uint32_t>(familyIndexes.size()),
+        .pQueueFamilyIndices   = familyIndexes.data(),
         .preTransform          = surfaceCapabilities.currentTransform,
         .compositeAlpha        = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
         .presentMode           = chosenPresentMode,
@@ -200,25 +262,38 @@ void ezWindow::createSwapchain() {
         throw ezError(Code::SWAPCHAIN_CREATION_FAIL, result, "Failed to create the swapchain for window: {}", title);
     }
 
-    swapchainExtent = chosenExtent;
-    swapchainFormat = chosenFormat.format;
+    swapchainExtent     = chosenExtent;
+    swapchainFormat     = chosenFormat.format;
+    swapchainColorSpace = chosenFormat.colorSpace;
+    presentMode         = chosenPresentMode;
     uint32_t swapchainImageCount;
     vkGetSwapchainImagesKHR(device.handle, swapchain, &swapchainImageCount, nullptr);
     swapchainImages.resize(swapchainImageCount);
     vkGetSwapchainImagesKHR(device.handle, swapchain, &swapchainImageCount, swapchainImages.data());
 
+    for (auto i = 0; i < swapchainImages.size(); i++) {
+        renderSemaphores.push_back(backend.createSemaphore().value());
+    }
+
     logger.debugf("created the swapchain for {} window with extent <{}, {}>", title, swapchainExtent.width, swapchainExtent.height);
 }
 
 void ezWindow::setupFrameData() {
+    stringstream log;
+    log << "Frame data:\n";
     for (auto i = 0; i < FRAMES_IN_FLY; i++) {
         frameData[i].commandPool        = backend.createCommandPool(graphicsQueue).value();
         frameData[i].commandBuffer      = backend.allocateCommandBuffer(frameData[i].commandPool).value();
         frameData[i].renderFence        = backend.createFence().value();
-        frameData[i].renderSemaphore    = backend.createSemaphore().value();
         frameData[i].swapchainSemaphore = backend.createSemaphore().value();
+
+        log << i << ".  pool:" << frameData[i].commandPool.handle << "\n";
+        log << "    cmd-buff :" << frameData[i].commandBuffer.handle << "\n";
+        log << "    fenc     :" << frameData[i].renderFence << "\n";
+        log << "    swap-sema:" << frameData[i].swapchainSemaphore << "\n";
     }
-    logger.debugf("Setup the required frame data for {} frames in the {} window", FRAMES_IN_FLY, title);
+    logger.debug(log.str());
+    log.clear();
 }
 
 VkSurfaceFormatKHR ezWindow::getSuitableFormat(vector<VkSurfaceFormatKHR>& formats) {
@@ -238,11 +313,6 @@ VkSurfaceFormatKHR ezWindow::getSuitableFormat(vector<VkSurfaceFormatKHR>& forma
 }
 
 VkPresentModeKHR ezWindow::choosePresentMode(std::vector<VkPresentModeKHR>& modes) {
-    for (auto& m : modes) {
-        if (m == VK_PRESENT_MODE_FIFO_RELAXED_KHR) {
-            return m;
-        }
-    }
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
@@ -284,7 +354,7 @@ void ezWindow::setupImgui() {
 
     ImGui::StyleColorsDark();
 
-    ImGui_ImplGlfw_InitForVulkan(glfwWindow, true);
+    ImGui_ImplGlfw_InitForVulkan(glfwWindow, false);
 
     VkPipelineRenderingCreateInfo pipelineRenderingCI {
         .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
@@ -313,7 +383,7 @@ void ezWindow::setupImgui() {
     colorAttchInfo = {
         .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext       = nullptr,
-        .imageView   = image.view,
+        .imageView   = drawImage.view,
         .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
         .loadOp      = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
@@ -326,6 +396,8 @@ void ezWindow::setupImgui() {
         .colorAttachmentCount = 1,
         .pColorAttachments    = &colorAttchInfo,
     };
+
+
 }
 
 void ezWindow::internalUpdate() {
@@ -341,8 +413,36 @@ void ezWindow::internalUpdate() {
     VkCommandBuffer cmd = currentFrameData->commandBuffer.handle;
 
     // ------------------- wait for fence ------------------- //
+    if (inResizeFrame) logger.debug("waiting for fences");
     vkWaitForFences(device.handle, 1, &currentFrameData->renderFence, VK_TRUE, 1000000000);
+    if (inResizeFrame) logger.debug("fences finished, aquiring image");
+
+    // ----------------- get swapchain image ---------------- //
+    uint32_t swapchainImageIndex;
+    VkResult result;
+    do {
+        result = vkAcquireNextImageKHR(device.handle, swapchain, 1000000000, currentFrameData->swapchainSemaphore, nullptr, &swapchainImageIndex);
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+            resize();
+            inResizeFrame = false;
+        }
+    } while (result != VK_SUCCESS);
+    VkImage swapchainImage = swapchainImages[swapchainImageIndex];
+    renderSemaphore        = renderSemaphores[swapchainImageIndex];
     vkResetFences(device.handle, 1, &currentFrameData->renderFence);
+    if (inResizeFrame) logger.debug("aquired image.");
+
+    // --------------------- main update -------------------- //
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+    
+    onUpdate();
+
+    ImGui::Render();
+    ImDrawData* draw_data = ImGui::GetDrawData();
+    if (inResizeFrame) logger.debug("main loop finished");
 
     // ---------------- begin command buffer ---------------- //
     VkCommandBufferBeginInfo cmdBeginInfo {
@@ -354,46 +454,18 @@ void ezWindow::internalUpdate() {
 
     vkResetCommandBuffer(cmd, 0);
     vkBeginCommandBuffer(cmd, &cmdBeginInfo);
+    if (inResizeFrame) logger.debug("began command buffer");
 
-    // --------------- image layout transition -------------- //
-    barrier[0] = {
-        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
-        .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
-        .dstStageMask     = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        .dstAccessMask    = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-        .oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout        = VK_IMAGE_LAYOUT_GENERAL,
-        .image            = image.handle,
-        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
-    };
-    depInfo = {
-        .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount = 1,
-        .pImageMemoryBarriers    = barrier,
-    };
-    vkCmdPipelineBarrier2(currentFrameData->commandBuffer.handle, &depInfo);
-
-    // --------------------- main update -------------------- //
-    ImGui_ImplVulkan_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-    ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
-
-    onUpdate();
-
-    ImGui::Render();
-    ImDrawData* draw_data = ImGui::GetDrawData();
     // ------------------------ imgui ----------------------- //
     barrier[0] = {
         .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
-        .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+        .srcAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
         .dstStageMask     = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
         .dstAccessMask    = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-        .oldLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED,
         .newLayout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .image            = image.handle,
+        .image            = drawImage.handle,
         .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
     };
     depInfo = {
@@ -406,11 +478,7 @@ void ezWindow::internalUpdate() {
     vkCmdBeginRendering(cmd, &imguiRenderInfo);
     ImGui_ImplVulkan_RenderDrawData(draw_data, cmd);
     vkCmdEndRendering(cmd);
-
-    // ----------------- get swapchain image ---------------- //
-    uint32_t swapchainImageIndex;
-    vkAcquireNextImageKHR(device.handle, swapchain, 1000000000, currentFrameData->swapchainSemaphore, nullptr, &swapchainImageIndex);
-    VkImage swapchainImage = swapchainImages[swapchainImageIndex];
+    if (inResizeFrame) logger.debug("submited commands");
 
     // ------------- transitions before transfer ------------ //
     barrier[0] = {
@@ -421,7 +489,7 @@ void ezWindow::internalUpdate() {
         .dstAccessMask    = VK_ACCESS_2_TRANSFER_READ_BIT,
         .oldLayout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .newLayout        = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        .image            = image.handle,
+        .image            = drawImage.handle,
         .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
     };
     barrier[1] = {
@@ -449,11 +517,11 @@ void ezWindow::internalUpdate() {
         .srcSubresource = ezVulkanBackend::SUBRESOURCE_LAYERS_WHOLE,
         .dstSubresource = ezVulkanBackend::SUBRESOURCE_LAYERS_WHOLE
     };
-    blitRegion.srcOffsets[1] = {.x = static_cast<int32_t>(image.extent.width), .y = static_cast<int32_t>(image.extent.height), .z = 1};
+    blitRegion.srcOffsets[1] = {.x = static_cast<int32_t>(swapchainExtent.width), .y = static_cast<int32_t>(swapchainExtent.height), .z = 1};
     blitRegion.dstOffsets[1] = {.x = static_cast<int32_t>(swapchainExtent.width), .y = static_cast<int32_t>(swapchainExtent.height), .z = 1};
     VkBlitImageInfo2 blitInfo {
         .sType          = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
-        .srcImage       = image.handle,
+        .srcImage       = drawImage.handle,
         .srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         .dstImage       = swapchainImage,
         .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -462,6 +530,7 @@ void ezWindow::internalUpdate() {
         .filter         = VK_FILTER_LINEAR,
     };
     vkCmdBlitImage2(cmd, &blitInfo);
+    if (inResizeFrame) logger.debug("blit");
 
     // ------------------- present layout ------------------- //
     barrier[0] = {
@@ -500,7 +569,7 @@ void ezWindow::internalUpdate() {
     };
     VkSemaphoreSubmitInfo signalInfo {
         .sType       = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-        .semaphore   = currentFrameData->renderSemaphore,
+        .semaphore   = renderSemaphore,
         .value       = 1,
         .stageMask   = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
         .deviceIndex = 0,
@@ -520,15 +589,18 @@ void ezWindow::internalUpdate() {
     VkPresentInfoKHR presentInfo = {
         .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores    = &currentFrameData->renderSemaphore,
+        .pWaitSemaphores    = &renderSemaphore,
         .swapchainCount     = 1,
         .pSwapchains        = &swapchain,
         .pImageIndices      = &swapchainImageIndex,
     };
     presentInfo.pImageIndices = &swapchainImageIndex;
-    vkQueuePresentKHR(presentQueue.handle, &presentInfo);
+
+    result = vkQueuePresentKHR(graphicsQueue.handle, &presentInfo);
+    if (inResizeFrame) logger.debug("presented");
 
     currentFrame++;
+    inResizeFrame = false;
 }
 
 bool ezWindow::isClosed() {

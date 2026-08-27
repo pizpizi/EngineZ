@@ -42,7 +42,7 @@
             "group": "test",
             "dependsOn": "Build",
             "linux": {
-                "command": "./build/examples/compute_example"
+                "command": "cd build/examples/fluid_sim && ./fluid_sim"
             }            
         },
         {

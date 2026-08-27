@@ -2,8 +2,8 @@ import os
 import subprocess
 from pathlib import Path
 
-SOURCE_DIR = Path("./examples/shaders")
-BUILD_DIR = Path("build/examples/shaders")
+SOURCE_DIR = Path("./examples")
+BUILD_DIR = Path("build/examples")
 
 EXTENSIONS = [".comp", ".cmp", ".vert", ".frag"]
 

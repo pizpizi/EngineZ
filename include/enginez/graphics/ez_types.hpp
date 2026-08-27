@@ -111,8 +111,6 @@ namespace enginez::graphics {
     typedef VkDescriptorSetLayoutBinding DescriptorSetLayoutBinding;
     typedef VkDescriptorSet DescriptorSet;
     struct DescriptorPool {
-        DescriptorPool(VkDescriptorPool handle) : handle(handle) {
-        }
         VkDescriptorPool handle;
     };
     struct PoolSizeRatio{
@@ -121,8 +119,6 @@ namespace enginez::graphics {
     };
     struct PipelineLayout {
         VkPipelineLayout handle;
-        std::vector<DescriptorSet> sets;
-        std::vector<PushConstantRange> pushConstantRanges;
     };
     struct PipeLine {
         VkPipeline handle;

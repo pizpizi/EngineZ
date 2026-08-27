@@ -1,7 +1,6 @@
 #pragma once
 #include "logz/logger.hpp"
 #include "graphics/ez_vulkan_backend.hpp"
-#include <memory>
 #include <vector>
 
 namespace enginez {
@@ -24,7 +23,6 @@ namespace enginez {
         void loop();
         void cleanUp();
         void terminate();
-
 
       private:
         bool shouldTerminate = false;

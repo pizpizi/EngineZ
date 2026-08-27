@@ -1,0 +1,33 @@
+#version 460
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(rgba8, set = 0, binding = 0) uniform image2D image;
+
+layout(push_constant) uniform constants {
+    vec2 brushPos;
+    float brushSize;
+} PushConstants;
+
+void main() {
+    ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(image);
+
+    if (texelCoord.x >= size.x || texelCoord.y >= size.y) {
+        return;
+    }
+
+    float dist = distance(PushConstants.brushPos, vec2(texelCoord));
+    
+    // Smooth circle edge over 1.5 pixels
+    float radius = PushConstants.brushSize;
+    float alpha = 1.0 - smoothstep(radius - 1.5, radius, dist);
+
+    if (alpha > 0.0) {
+        // Read existing color if you want additive/blended splatting, or direct store:
+        vec4 existingColor = imageLoad(image, texelCoord);
+        vec4 newColor = mix(existingColor, vec4(1.0), alpha);
+        
+        imageStore(image, texelCoord, newColor);
+    }
+}
