@@ -85,10 +85,10 @@
         "**/.hg": true,
         "**/.DS_Store": true,
         "**/Thumbs.db": true,
-        // "**.cache": true,
-        // "**/.venv":true,
+        "**.cache": true,
+        "**/.venv":true,
         // "build": true,
-        // "dependencies": true,
+        "dependencies": true,
         "old": true
     }
 }

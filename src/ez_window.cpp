@@ -11,7 +11,6 @@
 #include <cstdint>
 #include <format>
 #include <sstream>
-#include <stdexcept>
 #include <string>
 #include <vector>
 #include <vulkan/vk_layer.h>
@@ -27,15 +26,15 @@ void ezWindow::setupLogger() {
 }
 
 ezWindow::ezWindow(ezWindowCreateInfo& createInfo)
-    : engine(createInfo.engine),
+    : title(createInfo.title),
+      graphicsQueue(createInfo.graphicsQueue),
+      presentQueue(createInfo.presentQueue),
+      engine(createInfo.engine),
       backend(engine.graphicsBackend),
       allocator(backend.allocator),
       instance(engine.graphicsBackend.instance),
       device(engine.graphicsBackend.device),
-      logger(logz::createDefaultLogger(logz::SINCE_PROGRAM_START, createInfo.title)),
-      title(createInfo.title),
-      graphicsQueue(createInfo.graphicsQueue),
-      presentQueue(createInfo.presentQueue) {
+      logger(logz::createDefaultLogger(logz::SINCE_PROGRAM_START, createInfo.title)) {
     setupLogger();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -53,93 +52,24 @@ ezWindow::ezWindow(ezWindowCreateInfo& createInfo)
     glfwSetWindowUserPointer(glfwWindow, this);
 }
 
-void ezWindow::setupCallbacks() {
-    glfwSetCursorPosCallback(glfwWindow, ezWindow::cursorPosStatic);
-    ImGui_ImplGlfw_InstallCallbacks(glfwWindow);
+void ezWindow::cleanUp() {
+    glfwDestroyWindow(glfwWindow);
+    logger.debugf("cleaned up window: {}", title);
 }
-void ezWindow::assignDebugNames () {
-    setDebugName(device.handle, drawImage.handle, VK_OBJECT_TYPE_IMAGE, "draw_image");
 
-    for (auto i = 0; i < FRAMES_IN_FLY; i++) {
-        setDebugName(device.handle, frameData[i].commandBuffer.handle, VK_OBJECT_TYPE_COMMAND_BUFFER, "frame_{}_cmd", i);
-        setDebugName(device.handle, frameData[i].renderFence, VK_OBJECT_TYPE_FENCE, "frame_{}_fence", i);
-    }
+bool ezWindow::isClosed() {
+    return closed;
 }
+
 void ezWindow::cursorPosStatic(GLFWwindow* window, double xpos, double ypos){
     static_cast<ezWindow*>(glfwGetWindowUserPointer(window))->onMouseMoved(xpos, ypos);
 }
 
-void ezWindow::init(ezVulkanBackend* backend) {
-    createSurface();
-    createSwapchain();
-    setupFrameData();
-    setupDrawImage();
-    setupImgui();
-    setupCallbacks();
-    assignDebugNames();
+void ezWindow::mouseButtonStatic(GLFWwindow* window, int button, int action, int mods){
+    static_cast<ezWindow*>(glfwGetWindowUserPointer(window))->onMouseDown(button, action, mods);
 }
 
-void ezWindow::createSurface() {
-    if (glfwCreateWindowSurface(instance, glfwWindow, nullptr, &surface) != VK_SUCCESS) {
-        throw ezError(err::Code::SURFACE_CREATION_FAIL, "Failed to create the surface for window: {}", title);
-    }
-    logger.debugf("Created the surface for {} window", title);
-}
-
-void ezWindow::setupDrawImage() {
-    drawImage.extent = DRAW_IMAGE_EXTENT;
-
-    VkImageUsageFlags usages =
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
-
-    VkImageCreateInfo imageCI {
-        .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .pNext         = nullptr,
-        .flags         = 0,
-        .imageType     = VK_IMAGE_TYPE_2D,
-        .format        = VK_FORMAT_R16G16B16A16_SFLOAT,
-        .extent        = DRAW_IMAGE_EXTENT,
-        .mipLevels     = 1,
-        .arrayLayers   = 1,
-        .samples       = VK_SAMPLE_COUNT_1_BIT,
-        .tiling        = VK_IMAGE_TILING_OPTIMAL,
-        .usage         = usages,
-        .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-    };
-
-    VmaAllocationCreateInfo allocationCI {.usage = VMA_MEMORY_USAGE_GPU_ONLY, .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT};
-
-    auto result = vmaCreateImage(backend.allocator, &imageCI, &allocationCI, &drawImage.handle, &drawImage.allocation, nullptr);
-    if (result != VK_SUCCESS) {
-        throw ezError(Code::IMAGE_CREATION_FAIL, result, "Failed to create the draw image for window: {}", title);
-    }
-
-    VkImageViewCreateInfo viewCI {
-        .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .pNext            = nullptr,
-        .flags            = 0,
-        .image            = drawImage.handle,
-        .viewType         = VK_IMAGE_VIEW_TYPE_2D,
-        .format           = VK_FORMAT_R16G16B16A16_SFLOAT,
-        .components       = {},
-        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
-    };
-
-    result = vkCreateImageView(device.handle, &viewCI, nullptr, &drawImage.view);
-    if (result != VK_SUCCESS) {
-        throw ezError(Code::IMAGE_VIEW_CREATION_FAIL, result, "Failed to create the draw image view for window: {}", title);
-    }
-
-    logger.debugf("Setup the draw image for window: {}", title);
-}
-
-void ezWindow::resizeStatic(GLFWwindow* window, int width, int height) {
-    ezWindow* win     = (ezWindow*)glfwGetWindowUserPointer(window);
-    win->shouldResize = true;
-}
-
-void ezWindow::resize() {
+void ezWindow::internalResize() {
     vkQueueWaitIdle(graphicsQueue.handle);
     vkQueueWaitIdle(presentQueue.handle);
 
@@ -176,6 +106,27 @@ void ezWindow::resize() {
     vkGetSwapchainImagesKHR(device.handle, swapchain, &swapchainImageCount, swapchainImages.data());
 
     imguiRenderInfo.renderArea = {.extent = swapchainExtent};
+}
+
+//    +----------------------------------------------------+
+//    |                   initialization                   |
+//    +----------------------------------------------------+
+
+void ezWindow::init(ezVulkanBackend* backend) {
+    createSurface();
+    createSwapchain();
+    setupFrameData();
+    setupDrawImage();
+    setupImgui();
+    setupCallbacks();
+    assignDebugNames();
+}
+
+void ezWindow::createSurface() {
+    if (glfwCreateWindowSurface(instance, glfwWindow, nullptr, &surface) != VK_SUCCESS) {
+        throw ezError(err::Code::SURFACE_CREATION_FAIL, "Failed to create the surface for window: {}", title);
+    }
+    logger.debugf("Created the surface for {} window", title);
 }
 
 void ezWindow::createSwapchain() {
@@ -296,46 +247,52 @@ void ezWindow::setupFrameData() {
     log.clear();
 }
 
-VkSurfaceFormatKHR ezWindow::getSuitableFormat(vector<VkSurfaceFormatKHR>& formats) {
-    // TODO: better format selection
-    for (auto& fmt : formats) {
-        if (fmt.format == ezVulkanBackend::DESIRED_SWAPCHAIN_COLOR_FORMAT) {
-            return fmt;
-        }
+void ezWindow::setupDrawImage() {
+    drawImage.extent = DRAW_IMAGE_EXTENT;
+
+    VkImageUsageFlags usages =
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+
+    VkImageCreateInfo imageCI {
+        .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext         = nullptr,
+        .flags         = 0,
+        .imageType     = VK_IMAGE_TYPE_2D,
+        .format        = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .extent        = DRAW_IMAGE_EXTENT,
+        .mipLevels     = 1,
+        .arrayLayers   = 1,
+        .samples       = VK_SAMPLE_COUNT_1_BIT,
+        .tiling        = VK_IMAGE_TILING_OPTIMAL,
+        .usage         = usages,
+        .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+
+    VmaAllocationCreateInfo allocationCI {.usage = VMA_MEMORY_USAGE_GPU_ONLY, .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT};
+
+    auto result = vmaCreateImage(backend.allocator, &imageCI, &allocationCI, &drawImage.handle, &drawImage.allocation, nullptr);
+    if (result != VK_SUCCESS) {
+        throw ezError(Code::IMAGE_CREATION_FAIL, result, "Failed to create the draw image for window: {}", title);
     }
 
-    throw ezError(
-        Code::NO_SUITABLE_FORMAT,
-        "Desired color format ({}) is not supported by window: {}",
-        string_VkFormat(ezVulkanBackend::DESIRED_SWAPCHAIN_COLOR_FORMAT),
-        title
-    );
-}
+    VkImageViewCreateInfo viewCI {
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext            = nullptr,
+        .flags            = 0,
+        .image            = drawImage.handle,
+        .viewType         = VK_IMAGE_VIEW_TYPE_2D,
+        .format           = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .components       = {},
+        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
+    };
 
-VkPresentModeKHR ezWindow::choosePresentMode(std::vector<VkPresentModeKHR>& modes) {
-    return VK_PRESENT_MODE_FIFO_KHR;
-}
-
-VkExtent2D ezWindow::chooseSwapExtent(VkSurfaceCapabilitiesKHR& surfaceCapabilities) {
-    if (surfaceCapabilities.currentExtent.width != UINT32_MAX) {
-        return surfaceCapabilities.currentExtent;
-    } else {
-        int width, height;
-        glfwGetWindowSize(glfwWindow, &width, &height);
-        VkExtent2D extent {};
-        extent.width  = static_cast<uint32_t>(width);
-        extent.height = static_cast<uint32_t>(height);
-
-        extent.width  = max(surfaceCapabilities.minImageExtent.width, min(surfaceCapabilities.maxImageExtent.width, extent.width));
-        extent.height = max(surfaceCapabilities.minImageExtent.height, min(surfaceCapabilities.maxImageExtent.height, extent.height));
-
-        return extent;
+    result = vkCreateImageView(device.handle, &viewCI, nullptr, &drawImage.view);
+    if (result != VK_SUCCESS) {
+        throw ezError(Code::IMAGE_VIEW_CREATION_FAIL, result, "Failed to create the draw image view for window: {}", title);
     }
-}
 
-void ezWindow::cleanUp() {
-    glfwDestroyWindow(glfwWindow);
-    logger.debugf("cleaned up window: {}", title);
+    logger.debugf("Setup the draw image for window: {}", title);
 }
 
 void ezWindow::setupImgui() {
@@ -400,6 +357,62 @@ void ezWindow::setupImgui() {
 
 }
 
+void ezWindow::setupCallbacks() {
+    glfwSetCursorPosCallback(glfwWindow, ezWindow::cursorPosStatic);
+    glfwSetMouseButtonCallback(glfwWindow, ezWindow::mouseButtonStatic);
+    ImGui_ImplGlfw_InstallCallbacks(glfwWindow);
+}
+
+void ezWindow::assignDebugNames () {
+    setDebugName(device.handle, drawImage.handle, VK_OBJECT_TYPE_IMAGE, "draw_image");
+
+    for (auto i = 0; i < FRAMES_IN_FLY; i++) {
+        setDebugName(device.handle, frameData[i].commandBuffer.handle, VK_OBJECT_TYPE_COMMAND_BUFFER, "frame_{}_cmd", i);
+        setDebugName(device.handle, frameData[i].renderFence, VK_OBJECT_TYPE_FENCE, "frame_{}_fence", i);
+    }
+}
+
+VkSurfaceFormatKHR ezWindow::getSuitableFormat(vector<VkSurfaceFormatKHR>& formats) {
+    // TODO: better format selection
+    for (auto& fmt : formats) {
+        if (fmt.format == ezVulkanBackend::DESIRED_SWAPCHAIN_COLOR_FORMAT) {
+            return fmt;
+        }
+    }
+
+    throw ezError(
+        Code::NO_SUITABLE_FORMAT,
+        "Desired color format ({}) is not supported by window: {}",
+        string_VkFormat(ezVulkanBackend::DESIRED_SWAPCHAIN_COLOR_FORMAT),
+        title
+    );
+}
+
+VkPresentModeKHR ezWindow::choosePresentMode(std::vector<VkPresentModeKHR>& modes) {
+    return VK_PRESENT_MODE_IMMEDIATE_KHR;
+}
+
+VkExtent2D ezWindow::chooseSwapExtent(VkSurfaceCapabilitiesKHR& surfaceCapabilities) {
+    if (surfaceCapabilities.currentExtent.width != UINT32_MAX) {
+        return surfaceCapabilities.currentExtent;
+    } else {
+        int width, height;
+        glfwGetWindowSize(glfwWindow, &width, &height);
+        VkExtent2D extent {};
+        extent.width  = static_cast<uint32_t>(width);
+        extent.height = static_cast<uint32_t>(height);
+
+        extent.width  = max(surfaceCapabilities.minImageExtent.width, min(surfaceCapabilities.maxImageExtent.width, extent.width));
+        extent.height = max(surfaceCapabilities.minImageExtent.height, min(surfaceCapabilities.maxImageExtent.height, extent.height));
+
+        return extent;
+    }
+}
+
+//    +----------------------------------------------------+
+//    |                     render loop                    |
+//    +----------------------------------------------------+
+
 void ezWindow::internalUpdate() {
     if (glfwWindowShouldClose(glfwWindow)) {
         closed = true;
@@ -413,9 +426,12 @@ void ezWindow::internalUpdate() {
     VkCommandBuffer cmd = currentFrameData->commandBuffer.handle;
 
     // ------------------- wait for fence ------------------- //
-    if (inResizeFrame) logger.debug("waiting for fences");
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+    
     vkWaitForFences(device.handle, 1, &currentFrameData->renderFence, VK_TRUE, 1000000000);
-    if (inResizeFrame) logger.debug("fences finished, aquiring image");
 
     // ----------------- get swapchain image ---------------- //
     uint32_t swapchainImageIndex;
@@ -423,26 +439,19 @@ void ezWindow::internalUpdate() {
     do {
         result = vkAcquireNextImageKHR(device.handle, swapchain, 1000000000, currentFrameData->swapchainSemaphore, nullptr, &swapchainImageIndex);
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-            resize();
-            inResizeFrame = false;
+            internalResize();
         }
     } while (result != VK_SUCCESS);
     VkImage swapchainImage = swapchainImages[swapchainImageIndex];
     renderSemaphore        = renderSemaphores[swapchainImageIndex];
     vkResetFences(device.handle, 1, &currentFrameData->renderFence);
-    if (inResizeFrame) logger.debug("aquired image.");
 
     // --------------------- main update -------------------- //
-    ImGui_ImplVulkan_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-    ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
     
-    onUpdate();
+    draw(drawImage);
 
     ImGui::Render();
     ImDrawData* draw_data = ImGui::GetDrawData();
-    if (inResizeFrame) logger.debug("main loop finished");
 
     // ---------------- begin command buffer ---------------- //
     VkCommandBufferBeginInfo cmdBeginInfo {
@@ -454,7 +463,6 @@ void ezWindow::internalUpdate() {
 
     vkResetCommandBuffer(cmd, 0);
     vkBeginCommandBuffer(cmd, &cmdBeginInfo);
-    if (inResizeFrame) logger.debug("began command buffer");
 
     // ------------------------ imgui ----------------------- //
     barrier[0] = {
@@ -478,7 +486,6 @@ void ezWindow::internalUpdate() {
     vkCmdBeginRendering(cmd, &imguiRenderInfo);
     ImGui_ImplVulkan_RenderDrawData(draw_data, cmd);
     vkCmdEndRendering(cmd);
-    if (inResizeFrame) logger.debug("submited commands");
 
     // ------------- transitions before transfer ------------ //
     barrier[0] = {
@@ -530,7 +537,6 @@ void ezWindow::internalUpdate() {
         .filter         = VK_FILTER_LINEAR,
     };
     vkCmdBlitImage2(cmd, &blitInfo);
-    if (inResizeFrame) logger.debug("blit");
 
     // ------------------- present layout ------------------- //
     barrier[0] = {
@@ -597,25 +603,7 @@ void ezWindow::internalUpdate() {
     presentInfo.pImageIndices = &swapchainImageIndex;
 
     result = vkQueuePresentKHR(graphicsQueue.handle, &presentInfo);
-    if (inResizeFrame) logger.debug("presented");
 
     currentFrame++;
-    inResizeFrame = false;
 }
 
-bool ezWindow::isClosed() {
-    return closed;
-}
-
-void ezWindow::setHeight(int val) {
-    // TODO
-    throw std::runtime_error("not implemented");
-}
-void ezWindow::setWidth(int val) {
-    // TODO
-    throw std::runtime_error("not implemented");
-}
-void ezWindow::setTitle(std::string val) {
-    // TODO
-    throw std::runtime_error("not implemented");
-}

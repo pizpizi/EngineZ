@@ -16,6 +16,9 @@ add_library(enginez
     src/ez_engine.cpp
     src/ez_vulkan_backend.cpp
     src/ez_window.cpp
+    src/ez_descriptor_set_layout_builder.cpp
+    src/ez_pipeline_layout_builder.cpp
+    src/ez_image_builder.cpp
 )
 
 target_include_directories(enginez

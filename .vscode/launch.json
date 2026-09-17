@@ -5,7 +5,7 @@
             "name": "Debug",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/build/examples/main",
+            "program": "${workspaceFolder}/build/examples/fluid_sim/fluid_sim",
             "args": [],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "Build",

@@ -5,7 +5,6 @@
 #include "logz/logger.hpp"
 #include <cstdint>
 #include <expected>
-#include <map>
 #include <optional>
 #include <vector>
 #include <vulkan/vulkan_core.h>
@@ -15,14 +14,16 @@ namespace enginez {
 }
 namespace enginez::graphics {
     class ezWindow;
+    class ezImageBuilder;
 
     class ezVulkanBackend {
         friend ezWindow;
+        friend ezImageBuilder;
 
       public:
         inline static const VkFormat DESIRED_SWAPCHAIN_COLOR_FORMAT = VK_FORMAT_B8G8R8A8_SRGB;
         inline static const VkFormat DESIRED_COLOR_FORMAT           = VK_FORMAT_R16G16B16A16_SFLOAT;
-        inline static const VkFormat DESIRED_DEPTH_FORMAT           = VK_FORMAT_B8G8R8A8_SRGB;
+        inline static const VkFormat DESIRED_DEPTH_FORMAT           = VK_FORMAT_D32_SFLOAT;
         inline static const VkColorSpaceKHR DESIRED_COLOR_SPACE     = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
 
         inline static const VkImageSubresourceRange SUBRESOURCE_WHOLE {
@@ -40,10 +41,10 @@ namespace enginez::graphics {
             .layerCount     = 1,
         };
 
-        /**
-         * @brief Initializes the Vulkan instance and device.
-         * * @param deviceQueues A vector to be populated with requested queue handles.
-         */
+        VkInstance instance;
+        VmaAllocator allocator;
+        Device device;
+
         void init(std::vector<Queue>& deviceQueues);
         void cleanUp();
         void update();
@@ -68,13 +69,10 @@ namespace enginez::graphics {
         // ---------------------------------- //
 
         // ----------- descriptor ----------- //
-        std::expected<DescriptorSetLayout, err::Code> createDescriptorSetLayout(VkDescriptorSetLayoutBinding* bindings, uint32_t bindingCount);
-        void cleanUpDescriptorSetLayout(DescriptorSetLayout layout);
-
         std::expected<DescriptorPool, err::Code> createDescriptorSetPool(std::span<VkDescriptorPoolSize> poolSize);
         void cleanUpcreateDescriptorSetPool(DescriptorPool layout);
 
-        err::Code allocateDescriptorSets(DescriptorPool pool, uint32_t count, DescriptorSetLayout* pLayouts, DescriptorSet* pDescriptorSets);
+        err::Code allocateDescriptorSets(DescriptorPool pool, uint32_t count, DescriptorSetLayout& pLayouts, DescriptorSet* pDescriptorSets);
 
         err::Code updateDescriptorSets(uint32_t writesSize, VkWriteDescriptorSet* writes, uint32_t copiesSize, VkCopyDescriptorSet* copies);
         // ---------------------------------- //
@@ -85,23 +83,13 @@ namespace enginez::graphics {
         // ---------------------------------- //
 
         // ------------ pipelines ----------- //
-        std::expected<PipelineLayout, err::Code> createPipelineLayout(
-            uint32_t descriptorSetCount,
-            DescriptorSetLayout* pDescriptorSetLayouts,
-            uint32_t pushConstantRangesCount,
-            VkPushConstantRange* pPushConstantRanges
-        );
-        std::optional<PipeLine> createGraphicsPipeline(Shader frag, Shader vert);
+        std::optional<PipeLine> createGraphicsPipeline(Shader frag, Shader vert, PipelineLayout& layout);
         std::expected<PipeLine, err::Code> createComputePipeline(Shader& computeShader, PipelineLayout& layout);
         // ---------------------------------- //
 
         // -------------- sync -------------- //
         std::optional<Semaphore> createSemaphore();
         std::optional<Fence> createFence();
-        // ---------------------------------- //
-
-        // ------------- images ------------- //
-        
         // ---------------------------------- //
 
         bool submitAndSynchronize(CommandBuffer commandBuffer, Queue& queue);
@@ -118,10 +106,7 @@ namespace enginez::graphics {
         std::vector<PipeLine> pipelines;
         std::vector<ezWindow*> windows;
 
-        VkInstance instance;
-        VmaAllocator allocator;
         VkDebugUtilsMessengerEXT debugMessenger;
-        Device device;
 
         void setupLogger();
         void setupInstance();

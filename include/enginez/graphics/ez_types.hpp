@@ -1,8 +1,9 @@
 #pragma once
 
+#include <cstdint>
 #include <vector>
 #include <vulkan/vulkan_core.h>
-#include "GLFW/glfw3.h"
+#include "enginez/utils/ez_inplace_vector.hpp"
 #include "vma/vk_mem_alloc.h"
 
 namespace enginez::graphics {
@@ -71,7 +72,6 @@ namespace enginez::graphics {
         VkImageView view;
         VmaAllocation allocation;
         VkExtent3D extent;
-        VkFormat format;
     };
 
 //    +----------------------------------------------------+
@@ -107,8 +107,17 @@ namespace enginez::graphics {
     };
 
     typedef VkPushConstantRange PushConstantRange;
-    typedef VkDescriptorSetLayout DescriptorSetLayout;
-    typedef VkDescriptorSetLayoutBinding DescriptorSetLayoutBinding;
+
+    struct DescriptorSetLayoutBinding {
+        uint32_t count;
+        VkDescriptorType type;
+        VkShaderStageFlags stage;
+    };
+    struct DescriptorSetLayout {
+        VkDescriptorSetLayout handle;
+        utils::inplace_vector<DescriptorSetLayoutBinding, 20> bindings;
+    };
+
     typedef VkDescriptorSet DescriptorSet;
     struct DescriptorPool {
         VkDescriptorPool handle;
@@ -119,7 +128,9 @@ namespace enginez::graphics {
     };
     struct PipelineLayout {
         VkPipelineLayout handle;
+        utils::inplace_vector<DescriptorSetLayout, 5> descriptorSetLayouts;
     };
+    
     struct PipeLine {
         VkPipeline handle;
         PipelineLayout layout;

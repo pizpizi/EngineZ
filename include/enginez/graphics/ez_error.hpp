@@ -58,8 +58,15 @@ namespace enginez::err {
                 return "NO_SUITABLE_PRESENT_MODE";
             case Code::VULKAN_CALL_FAIL:
                 return "VULKAN_CALL_FAIL";
+            case Code::NO_ERROR:
+            case Code::COLOR_SPACE_NOT_PRESENT:
+            case Code::DESCRIPTOR_SET_LAYOUT_CREATION_FAILED:
+            case Code::PIPELINE_LAYOUT_CREATION_FAILED:
+            case Code::PIPELINE_CREATION_FAILED:
+            case Code::DESCRIPTOR_POOL_CREATION_FAILED:
+            case Code::DESCRIPTOR_ALLOCATION_FAILED:
+                return "UNKNOWN";
             }
-            return "UNKNOWN";
         }
     };
 

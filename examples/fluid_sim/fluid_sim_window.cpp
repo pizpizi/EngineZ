@@ -1,5 +1,8 @@
 
 #include "fluid_sim_window.hpp"
+#include "enginez/graphics/ez_descriptor_set_layout_builder.hpp"
+#include "enginez/graphics/ez_image_builder.hpp"
+#include "enginez/graphics/ez_pipeline_layout_builder.hpp"
 #include "enginez/graphics/ez_types.hpp"
 #include "enginez/graphics/ez_vulkan_backend.hpp"
 #include "enginez/utils/utilities.hpp"
@@ -11,7 +14,7 @@
 
 using namespace std;
 
-void FluidSimWindow::onUpdate() {
+void FluidSimWindow::draw(Image& drawImage) {
     auto cmd         = computeCommandBuffer.handle;
     auto graphicsCmd = graphicsCommandBuffer.handle;
 
@@ -28,10 +31,53 @@ void FluidSimWindow::onUpdate() {
     vkResetCommandBuffer(cmd, 0);
     vkBeginCommandBuffer(cmd, &computeCommandBufferBeginInfo);
 
+    // ---------------- descriptor set update --------------- //
+    static VkDescriptorImageInfo imageInfo[1] = {VkDescriptorImageInfo {
+        .sampler     = nullptr,
+        .imageView   = drawImage.view,
+        .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+    }};
+
+    static VkWriteDescriptorSet write[3] = {
+        VkWriteDescriptorSet {
+            .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet          = computeDS,
+            .dstBinding      = 3,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .pImageInfo      = imageInfo,
+        },
+    };
+    backend.updateDescriptorSets(1, write, 0, nullptr);
+
     // -------------- images to general layout -------------- //
-    static VkImageMemoryBarrier2 barrier[3] {};
-    static VkDependencyInfo depInfo;
-    barrier[0] = {
+    VkImageMemoryBarrier2 imageBarrier[10] {};
+    VkMemoryBarrier2      memoryBarrier[3] {};
+    VkDependencyInfo      depInfo;
+    imageBarrier[0] = {
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
+        .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        .oldLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .newLayout        = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        .image            = velocityXMap.handle,
+        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
+    };
+    imageBarrier[1] = {
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
+        .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        .oldLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .newLayout        = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        .image            = velocityYMap.handle,
+        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
+    };
+    imageBarrier[2] = {
         .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
         .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
         .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
@@ -39,21 +85,215 @@ void FluidSimWindow::onUpdate() {
         .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
         .oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED,
         .newLayout        = VK_IMAGE_LAYOUT_GENERAL,
-        .image            = pressureMap.handle,
+        .image            = drawImage.handle,
+        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
+    };
+    imageBarrier[3] = {
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
+        .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        .oldLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .newLayout        = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        .image            = smokeMap.handle,
+        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
+    };
+    imageBarrier[4] = {
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
+        .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        .oldLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .newLayout        = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .image            = velocityXOldMap.handle,
+        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
+    };
+    imageBarrier[5] = {
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
+        .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        .oldLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .newLayout        = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .image            = velocityYOldMap.handle,
+        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
+    };
+    imageBarrier[6] = {
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
+        .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        .oldLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .newLayout        = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .image            = smokeOldMap.handle,
         .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
     };
     depInfo = {
         .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount = 1,
-        .pImageMemoryBarriers    = barrier,
+        .imageMemoryBarrierCount = 7,
+        .pImageMemoryBarriers    = imageBarrier,
     };
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
+    // ------------------------ blit ------------------------ //
+    VkImageBlit2 blitRegion {
+        .sType          = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
+        .pNext          = nullptr,
+        .srcSubresource = ezVulkanBackend::SUBRESOURCE_LAYERS_WHOLE,
+        .dstSubresource = ezVulkanBackend::SUBRESOURCE_LAYERS_WHOLE
+    };
+    blitRegion.srcOffsets[1] = {.x = static_cast<int32_t>(SIM_BOUNDS.width + 1), .y = static_cast<int32_t>(SIM_BOUNDS.height), .z = 1};
+    blitRegion.dstOffsets[1] = {.x = static_cast<int32_t>(SIM_BOUNDS.width + 1), .y = static_cast<int32_t>(SIM_BOUNDS.height), .z = 1};
+    VkBlitImageInfo2 blitInfo {
+        .sType          = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
+        .srcImage       = velocityXMap.handle,
+        .srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        .dstImage       = velocityXOldMap.handle,
+        .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .regionCount    = 1,
+        .pRegions       = &blitRegion,
+        .filter         = VK_FILTER_LINEAR,
+    };
+    vkCmdBlitImage2(cmd, &blitInfo);
+    blitRegion.srcOffsets[1] = {.x = static_cast<int32_t>(SIM_BOUNDS.width), .y = static_cast<int32_t>(SIM_BOUNDS.height + 1), .z = 1};
+    blitRegion.dstOffsets[1] = {.x = static_cast<int32_t>(SIM_BOUNDS.width), .y = static_cast<int32_t>(SIM_BOUNDS.height + 1), .z = 1};
+    blitInfo.srcImage = velocityYMap.handle;
+    blitInfo.dstImage = velocityYOldMap.handle;
+    vkCmdBlitImage2(cmd, &blitInfo);
+    blitRegion.srcOffsets[1] = {.x = static_cast<int32_t>(SIM_BOUNDS.width), .y = static_cast<int32_t>(SIM_BOUNDS.height), .z = 1};
+    blitRegion.dstOffsets[1] = {.x = static_cast<int32_t>(SIM_BOUNDS.width), .y = static_cast<int32_t>(SIM_BOUNDS.height), .z = 1};
+    blitInfo.srcImage        = smokeMap.handle;
+    blitInfo.dstImage        = smokeOldMap.handle;
+    vkCmdBlitImage2(cmd, &blitInfo);
+
+    imageBarrier[0] = {
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .srcAccessMask    = VK_ACCESS_2_TRANSFER_READ_BIT,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        .oldLayout        = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        .newLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .image            = velocityXMap.handle,
+        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
+    };
+    imageBarrier[1] = {
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .srcAccessMask    = VK_ACCESS_2_TRANSFER_READ_BIT,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        .oldLayout        = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        .newLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .image            = velocityYMap.handle,
+        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
+    };
+    imageBarrier[2] = {
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .srcAccessMask    = VK_ACCESS_2_TRANSFER_READ_BIT,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        .oldLayout        = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        .newLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .image            = smokeMap.handle,
+        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
+    };
+    imageBarrier[3] = {
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .srcAccessMask    = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+        .oldLayout        = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .image            = velocityXOldMap.handle,
+        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
+    };
+    imageBarrier[4] = {
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .srcAccessMask    = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+        .oldLayout        = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .image            = velocityYOldMap.handle,
+        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
+    };
+    imageBarrier[5] = {
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .srcAccessMask    = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+        .oldLayout        = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .image            = smokeOldMap.handle,
+        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
+    };
+    depInfo = {
+        .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 6,
+        .pImageMemoryBarriers    = imageBarrier,
+    };
+    vkCmdPipelineBarrier2(cmd, &depInfo);
     // --------------------- dispatches --------------------- //
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.handle);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.layout.handle, 0, 1, &mainDescriptorSet, 0, nullptr);
-    vkCmdPushConstants(cmd, pipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
+    memoryBarrier[0] = {
+        .sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+        .pNext         = nullptr,
+        .srcStageMask  = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+        .dstStageMask  = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+    };
+    depInfo = {
+        .sType              = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .memoryBarrierCount = 1,
+        .pMemoryBarriers    = memoryBarrier,
+    };
+
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, brushPipeline.layout.handle, 0, 1, &computeDS, 0, nullptr);
+    vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
+
+    if (!paused || (shouldUpdate && !updated)) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, advectPipeline.handle);
+        vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+    }
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, brushPipeline.handle);
+    vkCmdPipelineBarrier2(cmd, &depInfo);
     vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+
+    if (!paused || (shouldUpdate && !updated)) {
+        for (int i = 0; i < 25; i++) {
+            controls.redBlackIdx = 0;
+            vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, projectPipeline.handle);
+            vkCmdPipelineBarrier2(cmd, &depInfo);
+            vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+
+            controls.redBlackIdx = 1;
+            vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, projectPipeline.handle);
+            vkCmdPipelineBarrier2(cmd, &depInfo);
+            vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+        }
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, velocityUpdatePipeline.handle);
+        vkCmdPipelineBarrier2(cmd, &depInfo);
+        vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+    }
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, visualizePipeline.handle);
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+    vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+
+    if(shouldUpdate && !updated) updated = true;
+
     vkEndCommandBuffer(cmd);
 
     // -------------- submit to compute queueu -------------- //
@@ -93,57 +333,6 @@ void FluidSimWindow::onUpdate() {
     };
     vkResetCommandBuffer(graphicsCmd, 0);
     vkBeginCommandBuffer(graphicsCmd, &graphicsCommandBufferBeginInfo);
-
-    // ------------- layout transitions for blit ------------ //
-    barrier[0] = {
-        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
-        .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
-        .dstStageMask     = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-        .dstAccessMask    = VK_ACCESS_2_TRANSFER_READ_BIT,
-        .oldLayout        = VK_IMAGE_LAYOUT_GENERAL,
-        .newLayout        = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        .image            = pressureMap.handle,
-        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
-    };
-    barrier[1] = {
-        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
-        .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
-        .dstStageMask     = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-        .dstAccessMask    = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-        .oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout        = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .image            = drawImage.handle,
-        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
-    };
-    depInfo = {
-        .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount = 2,
-        .pImageMemoryBarriers    = barrier,
-    };
-    vkCmdPipelineBarrier2(graphicsCmd, &depInfo);
-
-    // ------------------------ blit ------------------------ //
-    static VkImageBlit2 blitRegion {
-        .sType          = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
-        .pNext          = nullptr,
-        .srcSubresource = ezVulkanBackend::SUBRESOURCE_LAYERS_WHOLE,
-        .dstSubresource = ezVulkanBackend::SUBRESOURCE_LAYERS_WHOLE
-    };
-    blitRegion.srcOffsets[1] = {.x = static_cast<int32_t>(SIM_BOUNDS.width), .y = static_cast<int32_t>(SIM_BOUNDS.height), .z = 1};
-    blitRegion.dstOffsets[1] = {.x = static_cast<int32_t>(SIM_BOUNDS.width), .y = static_cast<int32_t>(SIM_BOUNDS.height), .z = 1};
-    static VkBlitImageInfo2 blitInfo {
-        .sType          = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
-        .srcImage       = pressureMap.handle,
-        .srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        .dstImage       = drawImage.handle,
-        .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .regionCount    = 1,
-        .pRegions       = &blitRegion,
-        .filter         = VK_FILTER_LINEAR,
-    };
-    vkCmdBlitImage2(graphicsCmd, &blitInfo);
     vkEndCommandBuffer(graphicsCmd);
 
     // -------------- submit to graphics queue -------------- //
@@ -177,13 +366,46 @@ void FluidSimWindow::onUpdate() {
 
     ImGui::Begin("Controls");
     ImGui::SliderFloat("Brush size", &controls.brushSize, 0.1f, 100.f);
+    ImGui::SliderFloat("Visualization scale", &controls.visScale, 0.001f, 10.f);
+    if (ImGui::BeginCombo("Visualization", VISUALIZATION_TYPE[controls.visType])) {
+        for (auto i = 0; i < VISUALIZATION_TYPE_COUNT; i++) {
+            if (ImGui::Selectable(VISUALIZATION_TYPE[i])) {
+                controls.visType = i;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    if (ImGui::BeginCombo("Brush", BRUSH_TYPE[controls.brushType])) {
+        for (auto i = 0; i < BRUSH_TYPE_COUNT; i++) {
+            if (ImGui::Selectable(BRUSH_TYPE[i])) {
+                controls.brushType = i;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    if(ImGui::Button("update")) {
+        shouldUpdate = true;
+    } else {
+        shouldUpdate = false;
+        updated = false;
+    }
+
+    ImGui::Checkbox("paused", &paused);
+
     ImGui::End();
 }
 
 void FluidSimWindow::onMouseMoved(double xpos, double ypos) {
     controls.brushPos.x = xpos;
-    controls.brushPos.y = ypos;
+    controls.brushPos.y = SIM_BOUNDS.height - ypos;
 };
+void FluidSimWindow::onMouseDown(int button, int action, int mods) {
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        controls.brushDown = true;
+    } else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+        controls.brushDown = false;
+    }
+}
 
 void FluidSimWindow::onOpen() {
     createImages();
@@ -201,96 +423,172 @@ void FluidSimWindow::onClose() {
 }
 
 void FluidSimWindow::createImages() {
-    vector<uint32_t> familyIndices;
-    familyIndices.push_back(graphicsQueue.family);
-    if (graphicsQueue.family != computeQueue.family) familyIndices.push_back(computeQueue.family);
+    ezImageBuilder imageBuilder(backend);
 
-    VkImageCreateInfo imageCI {
-        .sType                 = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .pNext                 = nullptr,
-        .flags                 = 0,
-        .imageType             = VK_IMAGE_TYPE_2D,
-        .format                = VK_FORMAT_R8G8B8A8_UNORM,
-        .extent                = SIM_BOUNDS,
-        .mipLevels             = 1,
-        .arrayLayers           = 1,
-        .samples               = VK_SAMPLE_COUNT_1_BIT,
-        .tiling                = VK_IMAGE_TILING_OPTIMAL,
-        .usage                 = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-        .sharingMode           = familyIndices.size() > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
-        .queueFamilyIndexCount = static_cast<uint32_t>(familyIndices.size()),
-        .pQueueFamilyIndices   = familyIndices.data(),
-        .initialLayout         = VK_IMAGE_LAYOUT_UNDEFINED,
-    };
+    imageBuilder.addFamily(computeQueue.family)
+        .setFormat(VK_FORMAT_R32_SFLOAT)
+        .setExtent(SIM_BOUNDS)
+        .setUsage(VK_IMAGE_USAGE_STORAGE_BIT)
+        .build(pressureMap)
 
-    VmaAllocationCreateInfo allocationCI {
-        .usage         = VMA_MEMORY_USAGE_GPU_ONLY,
-        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-    };
+        .setUsage(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
+        .setFormat(VK_FORMAT_R8G8B8A8_UNORM)
+        .build(smokeMap)
+        .build(smokeOldMap)
 
-    vmaCreateImage(allocator, &imageCI, &allocationCI, &pressureMap.handle, &pressureMap.allocation, nullptr);
-
-    VkImageViewCreateInfo viewCI {
-        .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .pNext            = nullptr,
-        .flags            = 0,
-        .image            = pressureMap.handle,
-        .viewType         = VK_IMAGE_VIEW_TYPE_2D,
-        .format           = VK_FORMAT_R8G8B8A8_UNORM,
-        .components       = {},
-        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
-    };
-
-    vkCreateImageView(device.handle, &viewCI, nullptr, &pressureMap.view);
-
-    pressureMap.extent = SIM_BOUNDS;
+        .setFormat(VK_FORMAT_R32_SFLOAT)
+        .setExtent({SIM_BOUNDS.width + 1, SIM_BOUNDS.height, 1})
+        .build(velocityXMap)
+        .build(velocityXOldMap)
+        .setExtent({SIM_BOUNDS.width, SIM_BOUNDS.height + 1, 1})
+        .build(velocityYOldMap)
+        .build(velocityYMap);
 }
+
 void FluidSimWindow::createPipelines() {
-    VkDescriptorSetLayoutBinding binding {
-        .binding         = 0,
-        .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-        .descriptorCount = 1,
-        .stageFlags      = VK_SHADER_STAGE_COMPUTE_BIT,
-    };
-    VkPushConstantRange pushConstantRange {
-        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-        .offset     = 0,
-        .size       = sizeof(Controls),
-    };
-    mainDescriptorSetLayout = backend.createDescriptorSetLayout(&binding, 1).value();
-    auto pipelineLayout     = backend.createPipelineLayout(1, &mainDescriptorSetLayout, 1, &pushConstantRange).value();
+    ezDescriptorSetLayoutBuilder descriptorSetLayoutBuilder(backend);
+    ezPipelineLayoutBuilder      pipelineLayoutBuilder(backend);
 
-    auto shader = backend.createShader("shaders/test.comp.spv").value();
+    descriptorSetLayoutBuilder.addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+        .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+        .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+        .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+        .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+        .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+        .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+        .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+        .build(computeDSLayout);
 
-    pipeline = backend.createComputePipeline(shader, pipelineLayout).value();
+    PipelineLayout pipelineLayout;
+    pipelineLayoutBuilder.addSet(computeDSLayout).addConstant(sizeof(Controls), VK_SHADER_STAGE_COMPUTE_BIT).build(pipelineLayout);
+
+    auto advectShader         = backend.createShader("shaders/fluid_sim_advect.spv").value();
+    auto brushShader          = backend.createShader("shaders/fluid_sim_brush.spv").value();
+    auto projectShader        = backend.createShader("shaders/fluid_sim_project.spv").value();
+    auto velocityUpdateShader = backend.createShader("shaders/fluid_sim_update_velocities.spv").value();
+    auto visualizeShader      = backend.createShader("shaders/fluid_sim_visualize.spv").value();
+
+    projectPipeline        = backend.createComputePipeline(projectShader, pipelineLayout).value();
+    advectPipeline         = backend.createComputePipeline(advectShader, pipelineLayout).value();
+    brushPipeline          = backend.createComputePipeline(brushShader, pipelineLayout).value();
+    velocityUpdatePipeline = backend.createComputePipeline(velocityUpdateShader, pipelineLayout).value();
+    visualizePipeline      = backend.createComputePipeline(visualizeShader, pipelineLayout).value();
 }
 
 void FluidSimWindow::createDescriptorSets() {
-    backend.allocateDescriptorSets(descriptorPool, 1, &mainDescriptorSetLayout, &mainDescriptorSet);
+    backend.allocateDescriptorSets(descriptorPool, 1, computeDSLayout, &computeDS);
 
-    VkDescriptorImageInfo imageInfo {
-        .sampler     = nullptr,
-        .imageView   = pressureMap.view,
-        .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+    VkDescriptorImageInfo imageInfo[7] = {
+        VkDescriptorImageInfo {
+            .sampler     = nullptr,
+            .imageView   = pressureMap.view,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        },
+        VkDescriptorImageInfo {
+            .sampler     = nullptr,
+            .imageView   = velocityXMap.view,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        },
+        VkDescriptorImageInfo {
+            .sampler     = nullptr,
+            .imageView   = velocityYMap.view,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        },
+        VkDescriptorImageInfo {
+            .sampler     = nullptr,
+            .imageView   = smokeMap.view,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        },
+        VkDescriptorImageInfo {
+            .sampler     = nullptr,
+            .imageView   = velocityXOldMap.view,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        },
+        VkDescriptorImageInfo {
+            .sampler     = nullptr,
+            .imageView   = velocityYOldMap.view,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        },
+        VkDescriptorImageInfo {
+            .sampler     = nullptr,
+            .imageView   = smokeOldMap.view,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        },
     };
 
-    VkWriteDescriptorSet write {
-        .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet          = mainDescriptorSet,
-        .dstBinding      = 0,
-        .dstArrayElement = 0,
-        .descriptorCount = 1,
-        .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-        .pImageInfo      = &imageInfo,
+    VkWriteDescriptorSet write[7] = {
+        VkWriteDescriptorSet {
+            .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet          = computeDS,
+            .dstBinding      = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .pImageInfo      = imageInfo,
+        },
+        VkWriteDescriptorSet {
+            .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet          = computeDS,
+            .dstBinding      = 1,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .pImageInfo      = imageInfo + 1,
+        },
+        VkWriteDescriptorSet {
+            .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet          = computeDS,
+            .dstBinding      = 2,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .pImageInfo      = imageInfo + 2,
+        },
+        VkWriteDescriptorSet {
+            .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet          = computeDS,
+            .dstBinding      = 4,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .pImageInfo      = imageInfo + 3,
+        },
+        VkWriteDescriptorSet {
+            .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet          = computeDS,
+            .dstBinding      = 5,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .pImageInfo      = imageInfo + 4,
+        },
+        VkWriteDescriptorSet {
+            .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet          = computeDS,
+            .dstBinding      = 6,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .pImageInfo      = imageInfo + 5,
+        },
+        VkWriteDescriptorSet {
+            .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet          = computeDS,
+            .dstBinding      = 7,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .pImageInfo      = imageInfo + 6,
+        },
     };
 
-    backend.updateDescriptorSets(1, &write, 0, nullptr);
+    backend.updateDescriptorSets(7, write, 0, nullptr);
 }
 void FluidSimWindow::createDescriptorPool() {
     vector<VkDescriptorPoolSize> poolSize = {
         {
             .type            = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-            .descriptorCount = 1,
+            .descriptorCount = 10,
         },
     };
     descriptorPool = backend.createDescriptorSetPool(poolSize).value();
@@ -314,7 +612,13 @@ void FluidSimWindow::assignDebugNames() {
     setDebugName(device.handle, graphicsQueue.handle, VK_OBJECT_TYPE_QUEUE, "queue_graphics");
     setDebugName(device.handle, presentQueue.handle, VK_OBJECT_TYPE_QUEUE, "queue_present");
 
-    setDebugName(device.handle, pressureMap.handle, VK_OBJECT_TYPE_IMAGE, "pressure_map");
+    setDebugName(device.handle, pressureMap.handle, VK_OBJECT_TYPE_IMAGE, "pressureMap");
+    setDebugName(device.handle, velocityXMap.handle, VK_OBJECT_TYPE_IMAGE, "velocityXMap");
+    setDebugName(device.handle, velocityXOldMap.handle, VK_OBJECT_TYPE_IMAGE, "velocityXOldMap");
+    setDebugName(device.handle, velocityYMap.handle, VK_OBJECT_TYPE_IMAGE, "velocityYMap");
+    setDebugName(device.handle, velocityYOldMap.handle, VK_OBJECT_TYPE_IMAGE, "velocityYOldMap");
+    setDebugName(device.handle, smokeMap.handle, VK_OBJECT_TYPE_IMAGE, "smokeMap");
+    setDebugName(device.handle, smokeOldMap.handle, VK_OBJECT_TYPE_IMAGE, "smokeOldMap");
 
     // setDebugName(device.handle, renderSemaphore, VK_OBJECT_TYPE_SEMAPHORE, "sem_render");
     setDebugName(device.handle, computeSemaphore, VK_OBJECT_TYPE_SEMAPHORE, "sem_compute");

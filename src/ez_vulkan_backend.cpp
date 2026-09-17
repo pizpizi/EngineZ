@@ -6,8 +6,8 @@
 #include "enginez/graphics/ez_types.hpp"
 #include "enginez/graphics/ez_vulkan_backend.hpp"
 #include "enginez/graphics/ez_window.hpp"
-#include "logz/logger.hpp"
 #include "enginez/utils/utilities.hpp"
+#include "logz/logger.hpp"
 #include "vma/vk_mem_alloc.h"
 #include <X11/X.h>
 #include <cstddef>
@@ -23,7 +23,6 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <utility>
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
@@ -63,13 +62,14 @@ void ezVulkanBackend::setupInstance() {
     logger.debug(format("Api version: {}.{}.{}", VK_API_VERSION_MAJOR(version), VK_API_VERSION_MINOR(version), VK_API_VERSION_PATCH(version)));
 
     VkInstanceCreateInfo instanceCreateInfo {};
-    VkApplicationInfo appCreateInfo {};
+    VkApplicationInfo    appCreateInfo {};
 
     // ------------------------- data ------------------------ //
     vector<const char*> requiredInstanceExtensions = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
     vector<const char*> requiredInstanceLayers     = {"VK_LAYER_KHRONOS_validation"};
+    // 
 
-    uint32_t availableExtentsionCount;
+    uint32_t                      availableExtentsionCount;
     vector<VkExtensionProperties> availableExtensions;
     vkEnumerateInstanceExtensionProperties(nullptr, &availableExtentsionCount, nullptr);
     availableExtensions.resize(availableExtentsionCount);
@@ -80,7 +80,7 @@ void ezVulkanBackend::setupInstance() {
         requiredInstanceExtensions.push_back(ext);
     }
 
-    uint32_t availableLayersCount;
+    uint32_t                  availableLayersCount;
     vector<VkLayerProperties> availableLayers;
     vkEnumerateInstanceLayerProperties(&availableLayersCount, nullptr);
     availableLayers.resize(availableLayersCount);
@@ -162,7 +162,7 @@ void ezVulkanBackend::setupInstance() {
 }
 
 PhysicalDevice ezVulkanBackend::choosePhysicalDevice(std::vector<Queue> deviceQueues) {
-    uint32_t deviceCount;
+    uint32_t                 deviceCount;
     vector<VkPhysicalDevice> devices;
     vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
     devices.resize(deviceCount);
@@ -194,13 +194,13 @@ PhysicalDevice ezVulkanBackend::choosePhysicalDevice(std::vector<Queue> deviceQu
         VkPhysicalDeviceMemoryProperties memoryProperties {};
         vkGetPhysicalDeviceMemoryProperties(device, &memoryProperties);
 
-        uint32_t availableDeviceExtensionsCount;
+        uint32_t                      availableDeviceExtensionsCount;
         vector<VkExtensionProperties> availableDeviceExtensions;
         vkEnumerateDeviceExtensionProperties(device, nullptr, &availableDeviceExtensionsCount, nullptr);
         availableDeviceExtensions.resize(availableDeviceExtensionsCount);
         vkEnumerateDeviceExtensionProperties(device, nullptr, &availableDeviceExtensionsCount, availableDeviceExtensions.data());
 
-        uint32_t queueFamilyCount;
+        uint32_t                        queueFamilyCount;
         vector<VkQueueFamilyProperties> queueFamilyProperties;
         vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
         queueFamilyProperties.resize(queueFamilyCount);
@@ -355,9 +355,9 @@ PhysicalDevice ezVulkanBackend::choosePhysicalDevice(std::vector<Queue> deviceQu
     return chosenDevice;
 }
 bool ezVulkanBackend::assignQueues(PhysicalDevice& physicalDevice, std::vector<Queue>& queues) {
-    auto& queueFamilyProperties = physicalDevice.queueFamilyProperties;
-    uint32_t familyNum          = queueFamilyProperties.size();
-    uint32_t queueNum           = queues.size();
+    auto&    queueFamilyProperties = physicalDevice.queueFamilyProperties;
+    uint32_t familyNum             = queueFamilyProperties.size();
+    uint32_t queueNum              = queues.size();
 
     vector<uint32_t> filled;
     filled.resize(familyNum);
@@ -470,7 +470,7 @@ Device ezVulkanBackend::setupLogicalDevice(std::vector<Queue>& deviceQueues, Phy
     };
 
     VkDevice handle;
-    auto result = vkCreateDevice(phyisicalDevice.handle, &createInfo, nullptr, &handle);
+    auto     result = vkCreateDevice(phyisicalDevice.handle, &createInfo, nullptr, &handle);
     if (result != VK_SUCCESS) {
         throw runtime_error("failed to create a device");
     }
@@ -546,18 +546,18 @@ void ezVulkanBackend::setupDebugMessenger() {
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL ezVulkanBackend::baseDebugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageTypes,
+    VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT             messageTypes,
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-    void* pUserData
+    void*                                       pUserData
 ) {
     auto backend = static_cast<ezVulkanBackend*>(pUserData);
     return backend->debugCallback(messageSeverity, messageTypes, pCallbackData);
 }
 
 VkBool32 ezVulkanBackend::debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageTypes,
+    VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT             messageTypes,
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData
 ) {
     switch (messageSeverity) {
@@ -714,25 +714,6 @@ void ezVulkanBackend::cleanUpBuffer(Buffer& buffer) {
 //    |                     descriptors                    |
 //    +----------------------------------------------------+
 
-std::expected<DescriptorSetLayout, err::Code>
-ezVulkanBackend::createDescriptorSetLayout(VkDescriptorSetLayoutBinding* bindings, uint32_t bindingCount) {
-    VkDescriptorSetLayoutCreateInfo createInfo {
-        .sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = bindingCount,
-        .pBindings    = bindings,
-    };
-
-    VkDescriptorSetLayout handle;
-    if (vkCreateDescriptorSetLayout(device.handle, &createInfo, nullptr, &handle) != VK_SUCCESS) {
-        logger.error("failed to create the descriptor set layout");
-        return unexpected(err::Code::DESCRIPTOR_SET_LAYOUT_CREATION_FAILED);
-    }
-
-    return expected<DescriptorSetLayout, err::Code>(DescriptorSetLayout(handle));
-}
-void ezVulkanBackend::cleanUpDescriptorSetLayout(DescriptorSetLayout layout) {
-    vkDestroyDescriptorSetLayout(device.handle, layout, nullptr);
-}
 std::expected<DescriptorPool, err::Code> ezVulkanBackend::createDescriptorSetPool(std::span<VkDescriptorPoolSize> poolSizes) {
     uint32_t maxSize = 0;
     for (auto& rsc : poolSizes) {
@@ -758,12 +739,12 @@ void ezVulkanBackend::cleanUpcreateDescriptorSetPool(DescriptorPool layout) {
     vkDestroyDescriptorPool(device.handle, layout.handle, nullptr);
 }
 err::Code
-ezVulkanBackend::allocateDescriptorSets(DescriptorPool pool, uint32_t count, DescriptorSetLayout* pLayouts, DescriptorSet* pDescriptorSets) {
+ezVulkanBackend::allocateDescriptorSets(DescriptorPool pool, uint32_t count, DescriptorSetLayout& pLayouts, DescriptorSet* pDescriptorSets) {
     VkDescriptorSetAllocateInfo allocationInfo {};
     allocationInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocationInfo.descriptorSetCount = count;
     allocationInfo.descriptorPool     = pool.handle;
-    allocationInfo.pSetLayouts        = pLayouts;
+    allocationInfo.pSetLayouts        = &pLayouts.handle;
 
     if (vkAllocateDescriptorSets(device.handle, &allocationInfo, pDescriptorSets) != VK_SUCCESS) {
         logger.error("Failed to allocate descriptor sets.");
@@ -781,27 +762,6 @@ err::Code ezVulkanBackend::updateDescriptorSets(uint32_t writesSize, VkWriteDesc
 //    |                      pipelines                     |
 //    +----------------------------------------------------+
 
-expected<PipelineLayout, err::Code> ezVulkanBackend::createPipelineLayout(
-    uint32_t descriptorSetCount,
-    DescriptorSetLayout* pDescriptorSetLayouts,
-    uint32_t pushConstantRangesCount,
-    VkPushConstantRange* pPushConstantRanges
-) {
-    VkPipelineLayoutCreateInfo layoutCreateInfo {};
-    layoutCreateInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutCreateInfo.setLayoutCount         = descriptorSetCount;
-    layoutCreateInfo.pSetLayouts            = pDescriptorSetLayouts;
-    layoutCreateInfo.pushConstantRangeCount = pushConstantRangesCount;
-    layoutCreateInfo.pPushConstantRanges    = pPushConstantRanges;
-
-    VkPipelineLayout handle;
-    if (vkCreatePipelineLayout(device.handle, &layoutCreateInfo, nullptr, &handle) != VK_SUCCESS) {
-        logger.error("failed to create pipeline layout");
-        return std::unexpected(err::Code::PIPELINE_LAYOUT_CREATION_FAILED);
-    }
-
-    return expected<PipelineLayout, err::Code> {handle};
-}
 expected<PipeLine, err::Code> ezVulkanBackend::createComputePipeline(Shader& computeShader, PipelineLayout& layout) {
     VkPipelineShaderStageCreateInfo shaderStageCreateInfo {};
     shaderStageCreateInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -822,7 +782,7 @@ expected<PipeLine, err::Code> ezVulkanBackend::createComputePipeline(Shader& com
 
     return expected<PipeLine, err::Code> {{handle, layout}};
 }
-std::optional<PipeLine> ezVulkanBackend::createGraphicsPipeline(Shader frag, Shader vert) {
+std::optional<PipeLine> ezVulkanBackend::createGraphicsPipeline(Shader frag, Shader vert, PipelineLayout& layout) {
     // ----------- shader CIs ----------- //
     VkPipelineShaderStageCreateInfo shaderStagesCIs[2];
     // --- vertex --- //
@@ -839,8 +799,8 @@ std::optional<PipeLine> ezVulkanBackend::createGraphicsPipeline(Shader frag, Sha
     // ---------------------------------- //
 
     // ----------- states CIs ----------- //
-    VkPipelineVertexInputStateCreateInfo vertexStateCI{
-
+    VkPipelineVertexInputStateCreateInfo vertexStateCI {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
     };
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI {
         .sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -893,14 +853,14 @@ std::optional<PipeLine> ezVulkanBackend::createGraphicsPipeline(Shader frag, Sha
         .attachmentCount = 1,
         .pAttachments    = &blendAttachmentStateCI
     };
-    VkDynamicState dynamicStates[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkDynamicState                   dynamicStates[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
     VkPipelineDynamicStateCreateInfo dynamicStateCI {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO, .dynamicStateCount = 2, .pDynamicStates = dynamicStates
     };
     VkPipelineRenderingCreateInfo renderCI {
         .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .colorAttachmentCount    = 1,
-        .pColorAttachmentFormats = &ezVulkanBackend::DESIRED_SWAPCHAIN_COLOR_FORMAT,
+        .pColorAttachmentFormats = &ezVulkanBackend::DESIRED_COLOR_FORMAT,
         .depthAttachmentFormat   = ezVulkanBackend::DESIRED_DEPTH_FORMAT
     };
     // ---------------------------------- //
@@ -919,6 +879,7 @@ std::optional<PipeLine> ezVulkanBackend::createGraphicsPipeline(Shader frag, Sha
         .pDepthStencilState  = &depthStencilCI,
         .pColorBlendState    = &blendStateCI,
         .pDynamicState       = &dynamicStateCI,
+        .layout              = layout.handle,
     };
 
     VkPipeline handle;
@@ -1021,8 +982,6 @@ bool ezVulkanBackend::submitAndSynchronize(CommandBuffer commandBuffer, Queue& q
 //    +----------------------------------------------------+
 //    |                       images                       |
 //    +----------------------------------------------------+
-
-
 
 void ezVulkanBackend::update() {
     glfwPollEvents();
