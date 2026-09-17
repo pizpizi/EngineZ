@@ -12,15 +12,15 @@ using namespace enginez::graphics;
 
 struct Controls {
 
-    glm::float32 deltaTime   = 1.0 / 60;
+    glm::float32 deltaTime   = 1.0 / 165;
     glm::float32 density     = 1;
     glm::vec2    brushPos    = {0, 0};
     glm::int32   redBlackIdx = 0;
     glm::float32 brushSize   = 1;
     glm::ivec2   simBounds   = {1920, 1200};
     glm::uint32  brushDown   = false;
-    glm::uint32  brushType   = 0;
-    glm::uint32  visType     = 0;
+    glm::uint32  brushType   = 1;
+    glm::uint32  visType     = 1;
     glm::float32 visScale    = 10;
 };
 

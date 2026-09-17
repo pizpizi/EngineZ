@@ -1,10 +1,10 @@
 [[vk::binding(0, 0)]] RWTexture2D<float>  pressure;
 [[vk::binding(1, 0)]] RWTexture2D<float>  velocityX;
-[[vk::binding(5, 0)]] RWTexture2D<float>  oldVelocityX;
+[[vk::binding(5, 0)]] RWTexture2D<float>    oldVelocityX;
 [[vk::binding(2, 0)]] RWTexture2D<float>  velocityY;
-[[vk::binding(6, 0)]] RWTexture2D<float>  oldVelocityY;
+[[vk::binding(6, 0)]] RWTexture2D<float>    oldVelocityY;
 [[vk::binding(4, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> smoke;
-[[vk::binding(7, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> oldSmoke;
+[[vk::binding(7, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4>   oldSmoke;
 
 [[vk::binding(3, 0)]] RWTexture2D<float4> drawImage;
 
@@ -32,11 +32,11 @@ struct Constants {
 [[vk::push_constant]]
 ConstantBuffer<Constants> constants;
 
-float getDivergence(int2 coord) {
-    float u_right = velocityX[coord + int2(1, 0)];
-    float u_left  = velocityX[coord];
-    float v_up    = velocityY[coord + int2(0, 1)];
-    float v_down  = velocityY[coord];
+float getDivergence(int2 cord) {
+    float u_right = velocityX[int2(cord.x + 1, cord.y)];
+    float u_left  = velocityX[cord];
+    float v_down  = velocityY[int2(cord.x, cord.y + 1)];
+    float v_up    = velocityY[cord];
 
     return (u_right - u_left) + (v_up - v_down);
 }
@@ -51,18 +51,18 @@ float sampleVelocityX(RWTexture2D<float> image, float2 pos, float2 offset) {
 
     pos = frac(pos);
 
-    float bottomLeftV  = (bottomLeftCoord.x >= 0 && bottomLeftCoord.x <= constants.simBounds.x &&
-                          bottomLeftCoord.y >= 0 && bottomLeftCoord.y < constants.simBounds.y) ?
-                          image[bottomLeftCoord] : 0.0;
-    float bottomRightV = (bottomRightCoord.x >= 0 && bottomRightCoord.x <= constants.simBounds.x &&
-                          bottomRightCoord.y >= 0 && bottomRightCoord.y < constants.simBounds.y) ?
-                          image[bottomRightCoord] : 0.0;
-    float topLeftV     = (topLeftCoord.x >= 0 && topLeftCoord.x <= constants.simBounds.x &&
-                          topLeftCoord.y >= 0 && topLeftCoord.y < constants.simBounds.y) ? 
+    float topLeftV     = ((topLeftCoord.x >= 0 && topLeftCoord.x <= constants.simBounds.x) &&
+                          (topLeftCoord.y >= 0 && topLeftCoord.y < constants.simBounds.y)) ? 
                           image[topLeftCoord] : 0.0;
-    float topRightV    = (topRightCoord.x >= 0 && topRightCoord.x <= constants.simBounds.x &&
-                          topRightCoord.y >= 0 && topRightCoord.y < constants.simBounds.y) ?
+    float topRightV    = ((topRightCoord.x >= 0 && topRightCoord.x <= constants.simBounds.x) &&
+                          (topRightCoord.y >= 0 && topRightCoord.y < constants.simBounds.y)) ?
                           image[topRightCoord] : 0.0;
+    float bottomLeftV  = ((bottomLeftCoord.x >= 0 && bottomLeftCoord.x <= constants.simBounds.x) &&
+                          (bottomLeftCoord.y >= 0 && bottomLeftCoord.y < constants.simBounds.y)) ?
+                          image[bottomLeftCoord] : 0.0;
+    float bottomRightV = ((bottomRightCoord.x >= 0 && bottomRightCoord.x <= constants.simBounds.x) &&
+                          (bottomRightCoord.y >= 0 && bottomRightCoord.y < constants.simBounds.y)) ?
+                          image[bottomRightCoord] : 0.0;
 
     return lerp(
         lerp(bottomLeftV, bottomRightV, pos.x),
@@ -81,18 +81,18 @@ float sampleVelocityY(RWTexture2D<float> image, float2 pos, float2 offset) {
 
     pos = frac(pos);
 
-    float bottomLeftV  = (bottomLeftCoord.x >= 0 && bottomLeftCoord.x < constants.simBounds.x &&
-                          bottomLeftCoord.y >= 0 && bottomLeftCoord.y <= constants.simBounds.y) ?
-                          image[bottomLeftCoord] : 0.0;
-    float bottomRightV = (bottomRightCoord.x >= 0 && bottomRightCoord.x < constants.simBounds.x &&
-                          bottomRightCoord.y >= 0 && bottomRightCoord.y <= constants.simBounds.y) ?
-                          image[bottomRightCoord] : 0.0;
-    float topLeftV     = (topLeftCoord.x >= 0 && topLeftCoord.x < constants.simBounds.x &&
-                          topLeftCoord.y >= 0 && topLeftCoord.y <= constants.simBounds.y) ? 
+    float topLeftV     = ((topLeftCoord.x >= 0 && topLeftCoord.x < constants.simBounds.x) &&
+                          (topLeftCoord.y >= 0 && topLeftCoord.y <= constants.simBounds.y)) ? 
                           image[topLeftCoord] : 0.0;
-    float topRightV    = (topRightCoord.x >= 0 && topRightCoord.x < constants.simBounds.x &&
-                          topRightCoord.y >= 0 && topRightCoord.y <= constants.simBounds.y) ?
+    float topRightV    = ((topRightCoord.x >= 0 && topRightCoord.x < constants.simBounds.x) &&
+                          (topRightCoord.y >= 0 && topRightCoord.y <= constants.simBounds.y)) ?
                           image[topRightCoord] : 0.0;
+    float bottomLeftV  = ((bottomLeftCoord.x >= 0 && bottomLeftCoord.x < constants.simBounds.x) &&
+                          (bottomLeftCoord.y >= 0 && bottomLeftCoord.y <= constants.simBounds.y)) ?
+                          image[bottomLeftCoord] : 0.0;
+    float bottomRightV = ((bottomRightCoord.x >= 0 && bottomRightCoord.x < constants.simBounds.x) &&
+                          (bottomRightCoord.y >= 0 && bottomRightCoord.y <= constants.simBounds.y)) ?
+                          image[bottomRightCoord] : 0.0;
 
     return lerp(
         lerp(bottomLeftV, bottomRightV, pos.x),
@@ -111,18 +111,18 @@ float4 sampleProperty(RWTexture2D<float4> image, float2 pos, float2 offset) {
 
     pos = frac(pos);
 
-    float4 bottomLeftV  = (bottomLeftCoord.x >= 0 && bottomLeftCoord.x < constants.simBounds.x &&
-                           bottomLeftCoord.y >= 0 && bottomLeftCoord.y < constants.simBounds.y) ?
-                           image[bottomLeftCoord] : float4(0.0, 0.0, 0.0, 0.0);
-    float4 bottomRightV = (bottomRightCoord.x >= 0 && bottomRightCoord.x < constants.simBounds.x &&
-                           bottomRightCoord.y >= 0 && bottomRightCoord.y < constants.simBounds.y) ?
-                           image[bottomRightCoord] : float4(0.0, 0.0, 0.0, 0.0);
-    float4 topLeftV     = (topLeftCoord.x >= 0 && topLeftCoord.x < constants.simBounds.x &&
-                           topLeftCoord.y >= 0 && topLeftCoord.y < constants.simBounds.y) ? 
-                           image[topLeftCoord] : float4(0.0, 0.0, 0.0, 0.0);
-    float4 topRightV    = (topRightCoord.x >= 0 && topRightCoord.x < constants.simBounds.x &&
-                           topRightCoord.y >= 0 && topRightCoord.y < constants.simBounds.y) ?
-                           image[topRightCoord] : float4(0.0, 0.0, 0.0, 0.0);
+    float4 topLeftV     = ((topLeftCoord.x >= 0 && topLeftCoord.x < constants.simBounds.x) &&
+                          (topLeftCoord.y >= 0 && topLeftCoord.y < constants.simBounds.y)) ? 
+                          image[topLeftCoord] : float4(0.0, 0.0, 0.0, 0.0);
+    float4 topRightV    = ((topRightCoord.x >= 0 && topRightCoord.x < constants.simBounds.x) &&
+                          (topRightCoord.y >= 0 && topRightCoord.y < constants.simBounds.y)) ?
+                          image[topRightCoord] : float4(0.0, 0.0, 0.0, 0.0);
+    float4 bottomLeftV  = ((bottomLeftCoord.x >= 0 && bottomLeftCoord.x < constants.simBounds.x) &&
+                          (bottomLeftCoord.y >= 0 && bottomLeftCoord.y < constants.simBounds.y)) ?
+                          image[bottomLeftCoord] : float4(0.0, 0.0, 0.0, 0.0);
+    float4 bottomRightV = ((bottomRightCoord.x >= 0 && bottomRightCoord.x < constants.simBounds.x) &&
+                          (bottomRightCoord.y >= 0 && bottomRightCoord.y < constants.simBounds.y)) ?
+                          image[bottomRightCoord] : float4(0.0, 0.0, 0.0, 0.0);
 
     return lerp(
         lerp(bottomLeftV, bottomRightV, pos.x),
@@ -162,50 +162,31 @@ void main(uint3 id : SV_DispatchThreadID) {
     if (coord.x >= constants.simBounds.x || coord.y >= constants.simBounds.y)
         return;
 
-    // 1. Advect Left-edge Velocity (u)
     float2 leftEdgePos = float2(coord.x, coord.y + 0.5);
-    float2 leftEdgeVelocity = float2(
-        sampleVelocityX(oldVelocityX, leftEdgePos, float2(0.0, 0.5)),
-        sampleVelocityY(oldVelocityY, leftEdgePos, float2(0.5, 0.0))
-    );
+    float2 leftEdgeVelocity = float2(sampleVelocityX(oldVelocityX, leftEdgePos, float2(0, 0.5)), sampleVelocityY(oldVelocityY, leftEdgePos, float2(0.5, 0)));
     float2 leftEdgePrevPos = leftEdgePos - constants.deltaTime * leftEdgeVelocity;
-    velocityX[coord] = sampleVelocityX(oldVelocityX, leftEdgePrevPos, float2(0.0, 0.5));
+    velocityX[coord] = sampleVelocityX(oldVelocityX, leftEdgePrevPos, float2(0, 0.5));
 
-    // 2. Advect Bottom-edge Velocity (v)
     float2 bottomEdgePos = float2(coord.x + 0.5, coord.y);
-    float2 bottomEdgeVelocity = float2(
-        sampleVelocityX(oldVelocityX, bottomEdgePos, float2(0.0, 0.5)),
-        sampleVelocityY(oldVelocityY, bottomEdgePos, float2(0.5, 0.0))
-    );
+    float2 bottomEdgeVelocity = float2(sampleVelocityX(oldVelocityX, bottomEdgePos, float2(0, 0.5)), sampleVelocityY(oldVelocityY, bottomEdgePos, float2(0.5, 0)));
     float2 bottomEdgePrevPos = bottomEdgePos - constants.deltaTime * bottomEdgeVelocity;
-    velocityY[coord] = sampleVelocityY(oldVelocityY, bottomEdgePrevPos, float2(0.5, 0.0));
+    velocityY[coord] = sampleVelocityY(oldVelocityY, bottomEdgePrevPos, float2(0.5, 0));
 
-    // Domain edge boundaries
-    if (coord.x == constants.simBounds.x - 1) {
-        float2 rightEdgePos = float2(coord.x + 1.0, coord.y + 0.5);
-        float2 rightEdgeVelocity = float2(
-            sampleVelocityX(oldVelocityX, rightEdgePos, float2(0.0, 0.5)),
-            sampleVelocityY(oldVelocityY, rightEdgePos, float2(0.5, 0.0))
-        );
+    if(coord.x == constants.simBounds.x - 1) {
+        float2 rightEdgePos = float2(coord.x + 1, coord.y + 0.5);
+        float2 rightEdgeVelocity = float2(sampleVelocityX(oldVelocityX, rightEdgePos, float2(0, 0.5)), sampleVelocityY(oldVelocityY, rightEdgePos, float2(0.5, 0)));
         float2 rightEdgePrevPos = rightEdgePos - constants.deltaTime * rightEdgeVelocity;
-        velocityX[int2(coord.x + 1, coord.y)] = sampleVelocityX(oldVelocityX, rightEdgePrevPos, float2(0.0, 0.5));
+        velocityX[int2(coord.x + 1, coord.y)] = sampleVelocityX(oldVelocityX, rightEdgePrevPos, float2(0, 0.5));
     }
-    if (coord.y == constants.simBounds.y - 1) {
-        float2 topEdgePos = float2(coord.x + 0.5, coord.y + 1.0);
-        float2 topEdgeVelocity = float2(
-            sampleVelocityX(oldVelocityX, topEdgePos, float2(0.0, 0.5)),
-            sampleVelocityY(oldVelocityY, topEdgePos, float2(0.5, 0.0))
-        );
+    if(coord.y == constants.simBounds.y - 1) {
+        float2 topEdgePos = float2(coord.x + 0.5, coord.y + 1);
+        float2 topEdgeVelocity = float2(sampleVelocityX(oldVelocityX, topEdgePos, float2(0, 0.5)), sampleVelocityY(oldVelocityY, topEdgePos, float2(0.5, 0)));
         float2 topEdgePrevPos = topEdgePos - constants.deltaTime * topEdgeVelocity;
-        velocityY[int2(coord.x, coord.y + 1)] = sampleVelocityY(oldVelocityY, topEdgePrevPos, float2(0.5, 0.0));
+        velocityY[int2(coord.x, coord.y + 1)] = sampleVelocityY(oldVelocityY, topEdgePrevPos, float2(0.5, 0));
     }
 
-    // 3. Advect Smoke (Center)
     float2 centerPos = float2(coord.x + 0.5, coord.y + 0.5);
-    float2 centerVelocity = float2(
-        sampleVelocityX(oldVelocityX, centerPos, float2(0.0, 0.5)),
-        sampleVelocityY(oldVelocityY, centerPos, float2(0.5, 0.0))
-    );
+    float2 centerVelocity = float2(sampleVelocityX(oldVelocityX, centerPos, float2(0, 0.5)), sampleVelocityY(oldVelocityY, centerPos, float2(0.5, 0)));
     float2 centerPrevPos = centerPos - constants.deltaTime * centerVelocity;
     smoke[coord] = sampleProperty(oldSmoke, centerPrevPos, float2(0.5, 0.5));
 }
@@ -226,20 +207,21 @@ void main(uint3 id : SV_DispatchThreadID) {
     int neighbourNum = int(leftExist) + int(rightExist) + int(upExist) + int(downExist);
     if (neighbourNum == 0) return;
 
-    float sumP = (leftExist  ? pressure[int2(coord.x - 1, coord.y)] : 0.0)
-               + (rightExist ? pressure[int2(coord.x + 1, coord.y)] : 0.0)
-               + (downExist  ? pressure[int2(coord.x, coord.y - 1)] : 0.0)
-               + (upExist    ? pressure[int2(coord.x, coord.y + 1)] : 0.0);
+    float pCenter = pressure[coord];
 
-    float uLeft  = velocityX[coord];
-    float uRight = velocityX[coord + int2(1, 0)];
-    float uDown  = velocityY[coord];
-    float uUp    = velocityY[coord + int2(0, 1)];
+    float pDown  = downExist  ? pressure[int2(coord.x, coord.y - 1)] : pCenter;
+    float pUp    = upExist    ? pressure[int2(coord.x, coord.y + 1)] : pCenter;
+    float pRight = rightExist ? pressure[int2(coord.x + 1, coord.y)] : pCenter;
+    float pLeft  = leftExist  ? pressure[int2(coord.x - 1, coord.y)] : pCenter;
 
-    float div = (uRight - uLeft) + (uUp - uDown);
-    float rhs = -(constants.density / constants.deltaTime) * div;
+    float uLeft   = leftExist  ? velocityX[coord]                 : 0.0;
+    float uRight  = rightExist ? velocityX[coord + int2(1, 0)]    : 0.0;
+    float uUp     = upExist    ? velocityY[coord + int2(0, 1)]    : 0.0;
+    float uDown   = downExist  ? velocityY[coord]                 : 0.0;
 
-    pressure[coord] = (rhs + sumP) / float(neighbourNum);
+    float newPressure = (-constants.density / constants.deltaTime * (uRight - uLeft + uUp - uDown) + pDown + pLeft + pRight + pUp) / 4.0;
+
+    pressure[coord] = newPressure;
 }
 #endif
 
@@ -250,35 +232,38 @@ void main(uint3 id : SV_DispatchThreadID) {
     if (coord.x >= constants.simBounds.x || coord.y >= constants.simBounds.y)
         return;
 
+
     float pCenter = pressure[coord];
 
-    // Update bottom face (uDown)
-    bool downExist = (coord.y != 0);
-    if (downExist) {
-        float pDown = pressure[int2(coord.x, coord.y - 1)];
-        velocityY[coord] = velocityY[coord] - (constants.deltaTime / constants.density) * (pCenter - pDown);
-    } else {
-        velocityY[coord] = 0.0; // Solid bottom wall
-    }
+    bool downExist    = (coord.y != 0);
+    float pDown    = downExist    ? pressure[int2(coord.x, coord.y - 1)] : pCenter;
+    float uDown     = downExist    ? velocityY[coord] : 0.0;
+    float uDownNew     = downExist ? uDown - (constants.deltaTime / constants.density) * (pCenter - pDown) : 0.0;
+    velocityY[coord] = uDownNew;
 
-    // Update left face (uLeft)
-    bool leftExist = (coord.x != 0);
-    if (leftExist) {
-        float pLeft = pressure[int2(coord.x - 1, coord.y)];
-        velocityX[coord] = velocityX[coord] - (constants.deltaTime / constants.density) * (pCenter - pLeft);
-    } else {
-        velocityX[coord] = 0.0; // Solid left wall
-    }
+    bool leftExist  = (coord.x != 0);
+    float pLeft  = leftExist  ? pressure[int2(coord.x - 1, coord.y)] : pCenter;
+    float uLeft   = leftExist  ? velocityX[coord] : 0.0;
+    float uLeftNew   = leftExist ? uLeft - (constants.deltaTime / constants.density) * (pCenter - pLeft) : 0;
+    velocityX[coord] = uLeftNew;
 
-    // Domain outer edges (Right and Top walls)
-    if (coord.x == constants.simBounds.x - 1) {
-        velocityX[int2(coord.x + 1, coord.y)] = 0.0; // Solid right wall
+    if(coord.x == constants.simBounds.x - 1) {
+        bool rightExist = (coord.x != constants.simBounds.x - 1);
+        float pRight = rightExist ? pressure[int2(coord.x + 1, coord.y)] : pCenter;
+        float uRight     = rightExist ? velocityX[coord + int2(1, 0)] : 0.0;
+        float uRightNew  = rightExist ? uRight - (constants.deltaTime / constants.density) * (pRight - pCenter) : 0;
+        velocityX[int2(coord.x + 1, coord.y)] = uRightNew;
     }
-    if (coord.y == constants.simBounds.y - 1) {
-        velocityY[int2(coord.x, coord.y + 1)] = 0.0; // Solid top wall
+    if(coord.y == constants.simBounds.y - 1) {
+        bool upExist  = (coord.y != constants.simBounds.y - 1);
+        float pUp  = upExist  ? pressure[int2(coord.x, coord.y + 1)] : pCenter;
+        float uUp      = upExist  ? velocityY[coord + int2(0, 1)] : 0.0;
+        float uUpNew   = upExist ? uUp - (constants.deltaTime / constants.density) * (pUp - pCenter) : 0.0;
+        velocityY[int2(coord.x, coord.y + 1)] = uUpNew;
     }
 }
 #endif
+
 
 float3 hsvToRgb(float h, float s, float v) {
     float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
@@ -304,10 +289,10 @@ void main(uint3 id : SV_DispatchThreadID) {
         }
         case VISUALIZE_VELOCITY:
         {
-            float uRight = velocityX[coord + int2(1, 0)];
-            float vUp    = velocityY[coord + int2(0, 1)];
+            float uRight = (coord.x < constants.simBounds.x - 1) ? velocityX[coord + int2(1, 0)] : 0.0;
+            float vDown  = (coord.y < constants.simBounds.y - 1) ? velocityY[coord + int2(0, 1)] : 0.0;
             float u = 0.5 * (velocityX[coord] + uRight);
-            float v = 0.5 * (velocityY[coord] + vUp);
+            float v = 0.5 * (velocityY[coord] + vDown);
 
             float speed = length(float2(u, v));
             float angle = atan2(v, u);
@@ -319,13 +304,18 @@ void main(uint3 id : SV_DispatchThreadID) {
         }
         case VISUALIZE_DIVERGENCE:
         {
-            float divergence = getDivergence(coord) / constants.visScale;
+            float uLeft   = velocityX[coord];
+            float uRight  = velocityX[coord + int2(1, 0)];
+            float uUp     = velocityY[coord];
+            float uDown   = velocityY[coord + int2(0, 1)];
+
+            float divergence = (uRight - uLeft + uUp - uDown) / constants.visScale;
             outColor = (divergence >= 0.0) ? float4(divergence, 0.0, 0.0, 1.0) : float4(0.0, 0.0, -divergence, 1.0);
             break;
         }
         case VISUALIZE_SMOKE:
         {
-            outColor = float4(smoke[coord].xyz / constants.visScale, 1.0);
+            outColor = float4(smoke[coord].xyz / constants.visScale, 0.0);
             break;
         }
     }
