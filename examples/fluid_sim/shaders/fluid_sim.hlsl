@@ -1,9 +1,9 @@
-[[vk::binding(0, 0)]] RWTexture2D<float>  pressure;
-[[vk::binding(1, 0)]] RWTexture2D<float>  velocityX;
-[[vk::binding(5, 0)]] RWTexture2D<float>    oldVelocityX;
-[[vk::binding(2, 0)]] RWTexture2D<float>  velocityY;
-[[vk::binding(6, 0)]] RWTexture2D<float>    oldVelocityY;
-[[vk::binding(6, 0)]] RWTexture2D<float>    oldVelocityY;
+[[vk::binding(0, 0)]] RWTexture2D<float> pressure;
+[[vk::binding(1, 0)]] RWTexture2D<float> velocityX;
+[[vk::binding(5, 0)]] RWTexture2D<float> oldVelocityX;
+[[vk::binding(2, 0)]] RWTexture2D<float> velocityY;
+[[vk::binding(6, 0)]] RWTexture2D<float> oldVelocityY;
+[[vk::binding(8, 0)]] RWTexture2D<float> divergence;
 [[vk::binding(4, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> smoke;
 [[vk::binding(7, 0)]] [[vk::image_format("rgba16f")]]     RWTexture2D<float4>   oldSmoke;
 
@@ -208,24 +208,12 @@ void main(uint3 id : SV_DispatchThreadID) {
     bool downExist  = (coord.y != 0);
     bool upExist    = (coord.y != constants.simBounds.y - 1);
 
-    int neighbourNum = int(leftExist) + int(rightExist) + int(upExist) + int(downExist);
-    if (neighbourNum == 0) return;
-
-    float pCenter = pressure[coord];
-
-    float pDown  = downExist  ? pressure[int2(coord.x, coord.y - 1)] : pCenter;
-    float pUp    = upExist    ? pressure[int2(coord.x, coord.y + 1)] : pCenter;
-    float pRight = rightExist ? pressure[int2(coord.x + 1, coord.y)] : pCenter;
-    float pLeft  = leftExist  ? pressure[int2(coord.x - 1, coord.y)] : pCenter;
-
     float uLeft   = leftExist  ? velocityX[coord]                 : 0.0;
     float uRight  = rightExist ? velocityX[coord + int2(1, 0)]    : 0.0;
     float uUp     = upExist    ? velocityY[coord + int2(0, 1)]    : 0.0;
     float uDown   = downExist  ? velocityY[coord]                 : 0.0;
 
-    float newPressure = (-constants.density / constants.deltaTime * (uRight - uLeft + uUp - uDown) + pDown + pLeft + pRight + pUp) / 4.0;
-
-    pressure[coord] = lerp(pCenter, newPressure, constants.overRelaxation);
+    divergence[coord] = -constants.density / constants.deltaTime * (uRight - uLeft + uUp - uDown);
 }
 #endif
 
@@ -251,12 +239,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     float pRight = rightExist ? pressure[int2(coord.x + 1, coord.y)] : pCenter;
     float pLeft  = leftExist  ? pressure[int2(coord.x - 1, coord.y)] : pCenter;
 
-    float uLeft   = leftExist  ? velocityX[coord]                 : 0.0;
-    float uRight  = rightExist ? velocityX[coord + int2(1, 0)]    : 0.0;
-    float uUp     = upExist    ? velocityY[coord + int2(0, 1)]    : 0.0;
-    float uDown   = downExist  ? velocityY[coord]                 : 0.0;
-
-    float newPressure = (-constants.density / constants.deltaTime * (uRight - uLeft + uUp - uDown) + pDown + pLeft + pRight + pUp) / 4.0;
+    float newPressure = (divergence[coord] + pDown + pLeft + pRight + pUp) / 4.0;
 
     pressure[coord] = lerp(pCenter, newPressure, constants.overRelaxation);
 }
@@ -341,18 +324,13 @@ void main(uint3 id : SV_DispatchThreadID) {
         }
         case VISUALIZE_DIVERGENCE:
         {
-            float uLeft   = velocityX[coord];
-            float uRight  = velocityX[coord + int2(1, 0)];
-            float uUp     = velocityY[coord];
-            float uDown   = velocityY[coord + int2(0, 1)];
-
-            float divergence = (uRight - uLeft + uUp - uDown) / constants.visScale;
-            outColor = (divergence >= 0.0) ? float4(divergence, 0.0, 0.0, 1.0) : float4(0.0, 0.0, -divergence, 1.0);
+            float d = divergence[coord] / constants.visScale;
+            outColor = (d >= 0.0) ? float4(d, 0.0, 0.0, 1.0) : float4(0.0, 0.0, -d, 1.0);
             break;
         }
         case VISUALIZE_SMOKE:
         {
-            outColor = float4(smoke[coord].xyz / constants.visScale, 0.0);
+            outColor = float4(smoke[coord].xyz, 0.0);
             break;
         }
     }

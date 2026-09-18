@@ -53,12 +53,14 @@ class FluidSimWindow : public ezWindow {
     Image velocityYOldMap; 
     Image smokeMap;
     Image smokeOldMap;
+    Image divergenceMap;
 
     PipeLine brushPipeline;
     PipeLine advectPipeline;
     PipeLine visualizePipeline;
     PipeLine projectPipeline;
     PipeLine velocityUpdatePipeline;
+    PipeLine preProcessPipeline;
 
     DescriptorSetLayout computeDSLayout;
     DescriptorPool      descriptorPool;

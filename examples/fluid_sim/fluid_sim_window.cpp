@@ -161,8 +161,8 @@ void FluidSimWindow::draw(Image& drawImage) {
     vkCmdBlitImage2(cmd, &blitInfo);
     blitRegion.srcOffsets[1] = {.x = static_cast<int32_t>(SIM_BOUNDS.width), .y = static_cast<int32_t>(SIM_BOUNDS.height + 1), .z = 1};
     blitRegion.dstOffsets[1] = {.x = static_cast<int32_t>(SIM_BOUNDS.width), .y = static_cast<int32_t>(SIM_BOUNDS.height + 1), .z = 1};
-    blitInfo.srcImage = velocityYMap.handle;
-    blitInfo.dstImage = velocityYOldMap.handle;
+    blitInfo.srcImage        = velocityYMap.handle;
+    blitInfo.dstImage        = velocityYOldMap.handle;
     vkCmdBlitImage2(cmd, &blitInfo);
     blitRegion.srcOffsets[1] = {.x = static_cast<int32_t>(SIM_BOUNDS.width), .y = static_cast<int32_t>(SIM_BOUNDS.height), .z = 1};
     blitRegion.dstOffsets[1] = {.x = static_cast<int32_t>(SIM_BOUNDS.width), .y = static_cast<int32_t>(SIM_BOUNDS.height), .z = 1};
@@ -260,7 +260,6 @@ void FluidSimWindow::draw(Image& drawImage) {
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, brushPipeline.layout.handle, 0, 1, &computeDS, 0, nullptr);
     vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
 
-
     if (!paused || (shouldUpdate && !updated)) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, advectPipeline.handle);
         vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
@@ -271,6 +270,10 @@ void FluidSimWindow::draw(Image& drawImage) {
     vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
 
     if (!paused || (shouldUpdate && !updated)) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, preProcessPipeline.handle);
+        vkCmdPipelineBarrier2(cmd, &depInfo);
+        vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+
         for (int i = 0; i < iterations; i++) {
             controls.redBlackIdx = 0;
             vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
@@ -293,7 +296,7 @@ void FluidSimWindow::draw(Image& drawImage) {
     vkCmdPipelineBarrier2(cmd, &depInfo);
     vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
 
-    if(shouldUpdate && !updated) updated = true;
+    if (shouldUpdate && !updated) updated = true;
 
     vkEndCommandBuffer(cmd);
 
@@ -384,14 +387,14 @@ void FluidSimWindow::draw(Image& drawImage) {
         }
         ImGui::EndCombo();
     }
-    if(ImGui::Button("update")) {
+    if (ImGui::Button("update")) {
         shouldUpdate = true;
     } else {
         shouldUpdate = false;
-        updated = false;
+        updated      = false;
     }
     ImGui::Checkbox("paused", &paused);
-    ImGui::ColorPicker3("Smoke Color", (float*) &controls.brushColor);
+    ImGui::ColorPicker3("Smoke Color", (float*)&controls.brushColor);
     ImGui::InputInt("Iterations", &iterations);
     ImGui::InputFloat("Over relaxation", &controls.overRelaxation);
     ImGui::End();
@@ -403,7 +406,6 @@ void FluidSimWindow::onMouseMoved(double xpos, double ypos) {
 
     controls.brushPos.x = xpos;
     controls.brushPos.y = SIM_BOUNDS.height - ypos;
-
 };
 void FluidSimWindow::onMouseDown(int button, int action, int mods) {
     ImGuiIO& io = ImGui::GetIO();
@@ -444,6 +446,7 @@ void FluidSimWindow::createImages() {
         .setExtent(SIM_BOUNDS)
         .setUsage(VK_IMAGE_USAGE_STORAGE_BIT)
         .build(pressureMap)
+        .build(divergenceMap)
 
         .setUsage(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
         .setFormat(VK_FORMAT_R16G16B16A16_SFLOAT)
@@ -471,6 +474,7 @@ void FluidSimWindow::createPipelines() {
         .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
         .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
         .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+        .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
         .build(computeDSLayout);
 
     PipelineLayout pipelineLayout;
@@ -481,18 +485,20 @@ void FluidSimWindow::createPipelines() {
     auto projectShader        = backend.createShader("shaders/fluid_sim_project.spv").value();
     auto velocityUpdateShader = backend.createShader("shaders/fluid_sim_update_velocities.spv").value();
     auto visualizeShader      = backend.createShader("shaders/fluid_sim_visualize.spv").value();
+    auto preProcessShader     = backend.createShader("shaders/fluid_sim_pre_process.spv").value();
 
     projectPipeline        = backend.createComputePipeline(projectShader, pipelineLayout).value();
     advectPipeline         = backend.createComputePipeline(advectShader, pipelineLayout).value();
     brushPipeline          = backend.createComputePipeline(brushShader, pipelineLayout).value();
     velocityUpdatePipeline = backend.createComputePipeline(velocityUpdateShader, pipelineLayout).value();
     visualizePipeline      = backend.createComputePipeline(visualizeShader, pipelineLayout).value();
+    preProcessPipeline     = backend.createComputePipeline(preProcessShader, pipelineLayout).value();
 }
 
 void FluidSimWindow::createDescriptorSets() {
     backend.allocateDescriptorSets(descriptorPool, 1, computeDSLayout, &computeDS);
 
-    VkDescriptorImageInfo imageInfo[7] = {
+    VkDescriptorImageInfo imageInfo[8] = {
         VkDescriptorImageInfo {
             .sampler     = nullptr,
             .imageView   = pressureMap.view,
@@ -528,9 +534,14 @@ void FluidSimWindow::createDescriptorSets() {
             .imageView   = smokeOldMap.view,
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         },
+        VkDescriptorImageInfo {
+            .sampler     = nullptr,
+            .imageView   = divergenceMap.view,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        },
     };
 
-    VkWriteDescriptorSet write[7] = {
+    VkWriteDescriptorSet write[8] = {
         VkWriteDescriptorSet {
             .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstSet          = computeDS,
@@ -594,9 +605,18 @@ void FluidSimWindow::createDescriptorSets() {
             .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
             .pImageInfo      = imageInfo + 6,
         },
+        VkWriteDescriptorSet {
+            .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet          = computeDS,
+            .dstBinding      = 8,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .pImageInfo      = imageInfo + 7,
+        },
     };
 
-    backend.updateDescriptorSets(7, write, 0, nullptr);
+    backend.updateDescriptorSets(8, write, 0, nullptr);
 }
 void FluidSimWindow::createDescriptorPool() {
     vector<VkDescriptorPoolSize> poolSize = {
