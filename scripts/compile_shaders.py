@@ -16,7 +16,7 @@ def disassemble_spirv(spv_file: Path, out_txt_file: Path):
     subprocess.run(["spirv-dis", str(spv_file), "-o", str(out_txt_file)])
 
 def compile_glsl(src: Path, out_spv: Path, kernel_def: str = None):
-    cmd = ["glslangValidator", "-V", str(src.absolute())]
+    cmd = ["glslangValidator", "-V", "-g", str(src.absolute())]
     if kernel_def:
         cmd.append(f"-D{kernel_def}")
     cmd.extend(["-o", str(out_spv)])
@@ -28,6 +28,9 @@ def compile_hlsl(src: Path, out_spv: Path, kernel_def: str = None):
         "-spirv",
         "-T", "cs_6_0",
         "-E", "main",
+        "-Zi",
+        "-fspv-debug=vulkan-with-source",
+        "-O3",
         str(src.absolute())
     ]
     if kernel_def:

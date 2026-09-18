@@ -260,9 +260,10 @@ void FluidSimWindow::draw(Image& drawImage) {
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, brushPipeline.layout.handle, 0, 1, &computeDS, 0, nullptr);
     vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
 
+
     if (!paused || (shouldUpdate && !updated)) {
-        // vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, advectPipeline.handle);
-        // vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, advectPipeline.handle);
+        vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
     }
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, brushPipeline.handle);
@@ -270,18 +271,18 @@ void FluidSimWindow::draw(Image& drawImage) {
     vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
 
     if (!paused || (shouldUpdate && !updated)) {
-        for (int i = 0; i < 25; i++) {
+        for (int i = 0; i < iterations; i++) {
             controls.redBlackIdx = 0;
             vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, projectPipeline.handle);
             vkCmdPipelineBarrier2(cmd, &depInfo);
-            vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+            vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 32.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
 
             controls.redBlackIdx = 1;
             vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, projectPipeline.handle);
             vkCmdPipelineBarrier2(cmd, &depInfo);
-            vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+            vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 32.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
         }
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, velocityUpdatePipeline.handle);
@@ -389,21 +390,34 @@ void FluidSimWindow::draw(Image& drawImage) {
         shouldUpdate = false;
         updated = false;
     }
-
     ImGui::Checkbox("paused", &paused);
-
+    ImGui::ColorPicker3("Smoke Color", (float*) &controls.brushColor);
+    ImGui::InputInt("Iterations", &iterations);
+    ImGui::InputFloat("Over relaxation", &controls.overRelaxation);
     ImGui::End();
 }
 
 void FluidSimWindow::onMouseMoved(double xpos, double ypos) {
+    controls.brushDelta.x = xpos - controls.brushPos.x;
+    controls.brushDelta.y = SIM_BOUNDS.height - ypos - controls.brushPos.y;
+
     controls.brushPos.x = xpos;
     controls.brushPos.y = SIM_BOUNDS.height - ypos;
+
 };
 void FluidSimWindow::onMouseDown(int button, int action, int mods) {
+    ImGuiIO& io = ImGui::GetIO();
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+        controls.brushDown = false;
+        return;
+    }
+
+    if (io.WantCaptureMouse) {
+        return;
+    }
+
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         controls.brushDown = true;
-    } else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
-        controls.brushDown = false;
     }
 }
 
@@ -432,7 +446,7 @@ void FluidSimWindow::createImages() {
         .build(pressureMap)
 
         .setUsage(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
-        .setFormat(VK_FORMAT_R8G8B8A8_UNORM)
+        .setFormat(VK_FORMAT_R16G16B16A16_SFLOAT)
         .build(smokeMap)
         .build(smokeOldMap)
 
@@ -619,6 +633,12 @@ void FluidSimWindow::assignDebugNames() {
     setDebugName(device.handle, velocityYOldMap.handle, VK_OBJECT_TYPE_IMAGE, "velocityYOldMap");
     setDebugName(device.handle, smokeMap.handle, VK_OBJECT_TYPE_IMAGE, "smokeMap");
     setDebugName(device.handle, smokeOldMap.handle, VK_OBJECT_TYPE_IMAGE, "smokeOldMap");
+
+    setDebugName(device.handle, advectPipeline.handle, VK_OBJECT_TYPE_PIPELINE, "advectPipeline");
+    setDebugName(device.handle, projectPipeline.handle, VK_OBJECT_TYPE_PIPELINE, "projectPipeline");
+    setDebugName(device.handle, velocityUpdatePipeline.handle, VK_OBJECT_TYPE_PIPELINE, "velocityUpdatePipeline");
+    setDebugName(device.handle, brushPipeline.handle, VK_OBJECT_TYPE_PIPELINE, "brushPipeline");
+    setDebugName(device.handle, visualizePipeline.handle, VK_OBJECT_TYPE_PIPELINE, "visualizePipeline");
 
     // setDebugName(device.handle, renderSemaphore, VK_OBJECT_TYPE_SEMAPHORE, "sem_render");
     setDebugName(device.handle, computeSemaphore, VK_OBJECT_TYPE_SEMAPHORE, "sem_compute");

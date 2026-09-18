@@ -11,17 +11,19 @@ using namespace enginez;
 using namespace enginez::graphics;
 
 struct Controls {
-
     glm::float32 deltaTime   = 1.0 / 165;
-    glm::float32 density     = 1;
+    glm::float32 density     = 0.01;
     glm::vec2    brushPos    = {0, 0};
+    glm::vec2    brushDelta = {0, 0};
     glm::int32   redBlackIdx = 0;
     glm::float32 brushSize   = 1;
     glm::ivec2   simBounds   = {1920, 1200};
     glm::uint32  brushDown   = false;
-    glm::uint32  brushType   = 1;
-    glm::uint32  visType     = 1;
+    glm::uint32  brushType   = 0;
+    glm::vec3    brushColor = {1, 1, 1};
+    glm::uint32  visType     = 3;
     glm::float32 visScale    = 10;
+    glm::float32 overRelaxation = 1.98;
 };
 
 struct FrameData {
@@ -42,6 +44,7 @@ class FluidSimWindow : public ezWindow {
 
     Queue    computeQueue;
     Controls controls;
+    int iterations = 100;
 
     Image pressureMap;
     Image velocityXMap;

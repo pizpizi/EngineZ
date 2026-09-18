@@ -3,8 +3,9 @@
 [[vk::binding(5, 0)]] RWTexture2D<float>    oldVelocityX;
 [[vk::binding(2, 0)]] RWTexture2D<float>  velocityY;
 [[vk::binding(6, 0)]] RWTexture2D<float>    oldVelocityY;
-[[vk::binding(4, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> smoke;
-[[vk::binding(7, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4>   oldSmoke;
+[[vk::binding(6, 0)]] RWTexture2D<float>    oldVelocityY;
+[[vk::binding(4, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> smoke;
+[[vk::binding(7, 0)]] [[vk::image_format("rgba16f")]]     RWTexture2D<float4>   oldSmoke;
 
 [[vk::binding(3, 0)]] RWTexture2D<float4> drawImage;
 
@@ -20,13 +21,16 @@ struct Constants {
     float  deltaTime;
     float  density;
     float2 brushPos;
+    float2 brushDelta;
     int    redBlackIdx;
     float  brushSize;
     int2   simBounds;
     bool   brushDown;
     uint   brushType;
+    float3 brushColor;
     uint   visType;
     float  visScale;
+    float  overRelaxation;
 };
 
 [[vk::push_constant]]
@@ -47,7 +51,7 @@ float sampleVelocityX(RWTexture2D<float> image, float2 pos, float2 offset) {
     int2 bottomLeftCoord  = int2(floor(pos));
     int2 bottomRightCoord = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y);
     int2 topLeftCoord     = int2(bottomLeftCoord.x, bottomLeftCoord.y + 1);
-    int2 topRightCoord    = int2(topLeftCoord.x + 1, topLeftCoord.y + 1);
+    int2 topRightCoord    = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y + 1);
 
     pos = frac(pos);
 
@@ -77,7 +81,7 @@ float sampleVelocityY(RWTexture2D<float> image, float2 pos, float2 offset) {
     int2 bottomLeftCoord  = int2(floor(pos));
     int2 bottomRightCoord = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y);
     int2 topLeftCoord     = int2(bottomLeftCoord.x, bottomLeftCoord.y + 1);
-    int2 topRightCoord    = int2(topLeftCoord.x + 1, topLeftCoord.y + 1);
+    int2 topRightCoord    = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y + 1);
 
     pos = frac(pos);
 
@@ -107,7 +111,7 @@ float4 sampleProperty(RWTexture2D<float4> image, float2 pos, float2 offset) {
     int2 bottomLeftCoord  = int2(floor(pos));
     int2 bottomRightCoord = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y);
     int2 topLeftCoord     = int2(bottomLeftCoord.x, bottomLeftCoord.y + 1);
-    int2 topRightCoord    = int2(topLeftCoord.x + 1, topLeftCoord.y + 1);
+    int2 topRightCoord    = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y + 1);
 
     pos = frac(pos);
 
@@ -142,12 +146,12 @@ void main(uint3 id : SV_DispatchThreadID) {
         switch (constants.brushType) {
             case BRUSH_PRESSURE:
             {
-                velocityX[coord] = 1.0;
+                velocityX[coord] = 20 / constants.deltaTime;
                 break;
             }
             case BRUSH_SMOKE:
             {
-                smoke[coord] = float4(1.0, 1.0, 1.0, 0.0);
+                smoke[coord] = float4(constants.brushColor.xyz, 0.0);
                 break;
             }
         }
@@ -192,11 +196,11 @@ void main(uint3 id : SV_DispatchThreadID) {
 }
 #endif
 
-#ifdef KERNEL_PROJECT
+#ifdef KERNEL_PRE_PROCESS
 [numthreads(16, 16, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
     int2 coord = int2(id.xy);
-    if (coord.x >= constants.simBounds.x || coord.y >= constants.simBounds.y || ((coord.x + coord.y) % 2 != constants.redBlackIdx))
+    if (coord.x >= constants.simBounds.x || coord.y >= constants.simBounds.y)
         return;
 
     bool leftExist  = (coord.x != 0);
@@ -221,7 +225,40 @@ void main(uint3 id : SV_DispatchThreadID) {
 
     float newPressure = (-constants.density / constants.deltaTime * (uRight - uLeft + uUp - uDown) + pDown + pLeft + pRight + pUp) / 4.0;
 
-    pressure[coord] = newPressure;
+    pressure[coord] = lerp(pCenter, newPressure, constants.overRelaxation);
+}
+#endif
+
+#ifdef KERNEL_PROJECT
+[numthreads(16, 16, 1)]
+void main(uint3 id : SV_DispatchThreadID) {
+    int2 coord = int2(id.x * 2 + ((id.y + constants.redBlackIdx) & 1), id.y);
+    if (coord.x >= constants.simBounds.x || coord.y >= constants.simBounds.y)
+        return;
+
+    bool leftExist  = (coord.x != 0);
+    bool rightExist = (coord.x != constants.simBounds.x - 1);
+    bool downExist  = (coord.y != 0);
+    bool upExist    = (coord.y != constants.simBounds.y - 1);
+
+    int neighbourNum = int(leftExist) + int(rightExist) + int(upExist) + int(downExist);
+    if (neighbourNum == 0) return;
+
+    float pCenter = pressure[coord];
+
+    float pDown  = downExist  ? pressure[int2(coord.x, coord.y - 1)] : pCenter;
+    float pUp    = upExist    ? pressure[int2(coord.x, coord.y + 1)] : pCenter;
+    float pRight = rightExist ? pressure[int2(coord.x + 1, coord.y)] : pCenter;
+    float pLeft  = leftExist  ? pressure[int2(coord.x - 1, coord.y)] : pCenter;
+
+    float uLeft   = leftExist  ? velocityX[coord]                 : 0.0;
+    float uRight  = rightExist ? velocityX[coord + int2(1, 0)]    : 0.0;
+    float uUp     = upExist    ? velocityY[coord + int2(0, 1)]    : 0.0;
+    float uDown   = downExist  ? velocityY[coord]                 : 0.0;
+
+    float newPressure = (-constants.density / constants.deltaTime * (uRight - uLeft + uUp - uDown) + pDown + pLeft + pRight + pUp) / 4.0;
+
+    pressure[coord] = lerp(pCenter, newPressure, constants.overRelaxation);
 }
 #endif
 
