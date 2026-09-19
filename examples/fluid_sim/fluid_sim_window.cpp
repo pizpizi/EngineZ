@@ -61,6 +61,229 @@ void FluidSimWindow::draw(Image& drawImage) {
         .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
         .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
         .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        .oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .image            = drawImage.handle,
+        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
+    };
+    depInfo = {
+        .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers    = imageBarrier,
+    };
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+
+    // --------------------- dispatches --------------------- //
+
+    blitImages(cmd);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, brushPipeline.layout.handle, 0, 1, &computeDS, 0, nullptr);
+    vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
+
+    if (!paused || (shouldUpdate && !updated)) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, advectPipeline.handle);
+        vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+    }
+
+    blitImages(cmd);
+
+    memoryBarrier[0] = {
+        .sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+        .pNext         = nullptr,
+        .srcStageMask  = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+        .dstStageMask  = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+    };
+    depInfo = {
+        .sType              = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .memoryBarrierCount = 1,
+        .pMemoryBarriers    = memoryBarrier,
+    };
+
+    if (!paused || (shouldUpdate && !updated)) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, diffusePipeline.handle);
+        vkCmdPipelineBarrier2(cmd, &depInfo);
+        vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+    }
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, brushPipeline.handle);
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+    vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+
+    if (!paused || (shouldUpdate && !updated)) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, preProcessPipeline.handle);
+        vkCmdPipelineBarrier2(cmd, &depInfo);
+        vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+
+        for (int i = 0; i < iterations; i++) {
+            controls.redBlackIdx = alternateRedBlack ? i & 1 : 1;
+            vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, projectPipeline.handle);
+            vkCmdPipelineBarrier2(cmd, &depInfo);
+            vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 32.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+
+            controls.redBlackIdx = alternateRedBlack ? (i + 1) & 1 : 0;
+            vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, projectPipeline.handle);
+            vkCmdPipelineBarrier2(cmd, &depInfo);
+            vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 32.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+        }
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, velocityUpdatePipeline.handle);
+        vkCmdPipelineBarrier2(cmd, &depInfo);
+        vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+    }
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, visualizePipeline.handle);
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+    vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+
+    if (shouldUpdate && !updated) updated = true;
+
+    if (shouldClear) {
+        clearImages(cmd);
+        shouldClear = false;
+    }
+
+    vkEndCommandBuffer(cmd);
+
+    // -------------- submit to compute queueu -------------- //
+    static VkCommandBufferSubmitInfo computeBufferSubmitInfo {
+        .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+        .pNext         = nullptr,
+        .commandBuffer = cmd,
+        .deviceMask    = 0,
+    };
+    static VkSemaphoreSubmitInfo computeSemaphoreSubmitInfo {
+        .sType       = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .pNext       = nullptr,
+        .semaphore   = computeSemaphore,
+        .value       = 1,
+        .stageMask   = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .deviceIndex = 0,
+    };
+    static VkSubmitInfo2 computeSubmitInfo {
+        .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .pNext                    = nullptr,
+        .flags                    = 0,
+        .waitSemaphoreInfoCount   = 0,
+        .pWaitSemaphoreInfos      = nullptr,
+        .commandBufferInfoCount   = 1,
+        .pCommandBufferInfos      = &computeBufferSubmitInfo,
+        .signalSemaphoreInfoCount = 1,
+        .pSignalSemaphoreInfos    = &computeSemaphoreSubmitInfo,
+    };
+    vkQueueSubmit2(computeQueue.handle, 1, &computeSubmitInfo, computeFence);
+
+    // ------------ graphics command buffer begin ----------- //
+    static VkCommandBufferBeginInfo graphicsCommandBufferBeginInfo {
+        .sType            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext            = nullptr,
+        .flags            = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .pInheritanceInfo = nullptr,
+    };
+    vkResetCommandBuffer(graphicsCmd, 0);
+    vkBeginCommandBuffer(graphicsCmd, &graphicsCommandBufferBeginInfo);
+    vkEndCommandBuffer(graphicsCmd);
+
+    // -------------- submit to graphics queue -------------- //
+    static VkCommandBufferSubmitInfo graphicsBufferSubmitInfo {
+        .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+        .pNext         = nullptr,
+        .commandBuffer = graphicsCmd,
+        .deviceMask    = 0,
+    };
+    static VkSemaphoreSubmitInfo graphicsSemaphoreSubmitInfo {
+        .sType       = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .pNext       = nullptr,
+        .semaphore   = computeSemaphore,
+        .value       = 1,
+        .stageMask   = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .deviceIndex = 0,
+    };
+    static VkSubmitInfo2 graphicsSubmitInfo {
+        .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .pNext                    = nullptr,
+        .flags                    = 0,
+        .waitSemaphoreInfoCount   = 1,
+        .pWaitSemaphoreInfos      = &graphicsSemaphoreSubmitInfo,
+        .commandBufferInfoCount   = 1,
+        .pCommandBufferInfos      = &graphicsBufferSubmitInfo,
+        .signalSemaphoreInfoCount = 0,
+        .pSignalSemaphoreInfos    = nullptr,
+    };
+
+    vkQueueSubmit2(graphicsQueue.handle, 1, &graphicsSubmitInfo, nullptr);
+
+    ImGui::Begin("Controls");
+    ImGui::SliderFloat("Brush size", &controls.brushSize, 0.1f, 100.f);
+    ImGui::SliderFloat("Visualization scale", &controls.visScale, 0.001f, 10.f);
+    if (ImGui::BeginCombo("Visualization", VISUALIZATION_TYPE[controls.visType])) {
+        for (auto i = 0; i < VISUALIZATION_TYPE_COUNT; i++) {
+            if (ImGui::Selectable(VISUALIZATION_TYPE[i])) {
+                controls.visType = i;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    if (ImGui::BeginCombo("Brush", BRUSH_TYPE[controls.brushType])) {
+        for (auto i = 0; i < BRUSH_TYPE_COUNT; i++) {
+            if (ImGui::Selectable(BRUSH_TYPE[i])) {
+                controls.brushType = i;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    if (ImGui::Button("update")) {
+        shouldUpdate = true;
+    } else {
+        shouldUpdate = false;
+        updated      = false;
+    }
+    ImGui::Checkbox("paused", &paused);
+    ImGui::ColorPicker3("Smoke Color", (float*)&controls.brushColor);
+    ImGui::InputInt("Iterations", &iterations);
+    ImGui::InputFloat("Over relaxation", &controls.overRelaxation);
+    ImGui::InputFloat("Smoke diffusion", &controls.smokeDiffuse);
+    ImGui::Checkbox("Open edges", (bool*)&controls.openEdges);
+    ImGui::Checkbox("Alternate red-black", &alternateRedBlack);
+    if (ImGui::Button("clear")) {
+        shouldClear = true;
+    }
+    ImGui::End();
+}
+
+void FluidSimWindow::onMouseMoved(double xpos, double ypos) {
+    controls.brushDelta.x = xpos - controls.brushPos.x;
+    controls.brushDelta.y = SIM_BOUNDS.height - ypos - controls.brushPos.y;
+
+    controls.brushPos.x = xpos;
+    controls.brushPos.y = SIM_BOUNDS.height - ypos;
+};
+void FluidSimWindow::onMouseDown(int button, int action, int mods) {
+    ImGuiIO& io = ImGui::GetIO();
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+        controls.brushDown = false;
+        return;
+    }
+
+    if (io.WantCaptureMouse) {
+        return;
+    }
+
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        controls.brushDown = true;
+    }
+}
+
+void FluidSimWindow::blitImages(VkCommandBuffer cmd) {
+    VkImageMemoryBarrier2 imageBarrier[10] {};
+    VkDependencyInfo      depInfo;
+    imageBarrier[0] = {
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
+        .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
         .oldLayout        = VK_IMAGE_LAYOUT_GENERAL,
         .newLayout        = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         .image            = velocityXMap.handle,
@@ -83,23 +306,12 @@ void FluidSimWindow::draw(Image& drawImage) {
         .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
         .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
         .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-        .oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout        = VK_IMAGE_LAYOUT_GENERAL,
-        .image            = drawImage.handle,
-        .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
-    };
-    imageBarrier[3] = {
-        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
-        .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
-        .dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        .dstAccessMask    = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
         .oldLayout        = VK_IMAGE_LAYOUT_GENERAL,
         .newLayout        = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         .image            = smokeMap.handle,
         .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
     };
-    imageBarrier[4] = {
+    imageBarrier[3] = {
         .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
         .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
         .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
@@ -110,7 +322,7 @@ void FluidSimWindow::draw(Image& drawImage) {
         .image            = velocityXOldMap.handle,
         .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
     };
-    imageBarrier[5] = {
+    imageBarrier[4] = {
         .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
         .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
         .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
@@ -121,7 +333,7 @@ void FluidSimWindow::draw(Image& drawImage) {
         .image            = velocityYOldMap.handle,
         .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
     };
-    imageBarrier[6] = {
+    imageBarrier[5] = {
         .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
         .srcStageMask     = VK_PIPELINE_STAGE_2_NONE,
         .srcAccessMask    = VK_ACCESS_2_NONE_KHR,
@@ -134,7 +346,7 @@ void FluidSimWindow::draw(Image& drawImage) {
     };
     depInfo = {
         .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount = 7,
+        .imageMemoryBarrierCount = 6,
         .pImageMemoryBarriers    = imageBarrier,
     };
     vkCmdPipelineBarrier2(cmd, &depInfo);
@@ -242,8 +454,12 @@ void FluidSimWindow::draw(Image& drawImage) {
         .pImageMemoryBarriers    = imageBarrier,
     };
     vkCmdPipelineBarrier2(cmd, &depInfo);
-    // --------------------- dispatches --------------------- //
-    memoryBarrier[0] = {
+}
+
+void FluidSimWindow::clearImages(VkCommandBuffer cmd) {
+    VkClearColorValue clearColor {.float32 = {0.0, 0.0, 0.0, 0.0}};
+
+    VkMemoryBarrier2 memoryBarrier {
         .sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
         .pNext         = nullptr,
         .srcStageMask  = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -251,176 +467,21 @@ void FluidSimWindow::draw(Image& drawImage) {
         .dstStageMask  = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
         .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
     };
-    depInfo = {
+    VkDependencyInfo depInfo {
         .sType              = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .memoryBarrierCount = 1,
-        .pMemoryBarriers    = memoryBarrier,
+        .pMemoryBarriers    = &memoryBarrier,
     };
 
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, brushPipeline.layout.handle, 0, 1, &computeDS, 0, nullptr);
-    vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
-
-    if (!paused || (shouldUpdate && !updated)) {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, advectPipeline.handle);
-        vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
-    }
-
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, brushPipeline.handle);
     vkCmdPipelineBarrier2(cmd, &depInfo);
-    vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
-
-    if (!paused || (shouldUpdate && !updated)) {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, preProcessPipeline.handle);
-        vkCmdPipelineBarrier2(cmd, &depInfo);
-        vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
-
-        for (int i = 0; i < iterations; i++) {
-            controls.redBlackIdx = 0;
-            vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, projectPipeline.handle);
-            vkCmdPipelineBarrier2(cmd, &depInfo);
-            vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 32.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
-
-            controls.redBlackIdx = 1;
-            vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, projectPipeline.handle);
-            vkCmdPipelineBarrier2(cmd, &depInfo);
-            vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 32.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
-        }
-
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, velocityUpdatePipeline.handle);
-        vkCmdPipelineBarrier2(cmd, &depInfo);
-        vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
-    }
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, visualizePipeline.handle);
+    vkCmdClearColorImage(cmd, velocityXMap.handle, VK_IMAGE_LAYOUT_GENERAL, &clearColor, 1, &ezVulkanBackend::SUBRESOURCE_WHOLE);
+    vkCmdClearColorImage(cmd, velocityYMap.handle, VK_IMAGE_LAYOUT_GENERAL, &clearColor, 1, &ezVulkanBackend::SUBRESOURCE_WHOLE);
+    vkCmdClearColorImage(cmd, velocityXOldMap.handle, VK_IMAGE_LAYOUT_GENERAL, &clearColor, 1, &ezVulkanBackend::SUBRESOURCE_WHOLE);
+    vkCmdClearColorImage(cmd, velocityYOldMap.handle, VK_IMAGE_LAYOUT_GENERAL, &clearColor, 1, &ezVulkanBackend::SUBRESOURCE_WHOLE);
+    vkCmdClearColorImage(cmd, smokeMap.handle, VK_IMAGE_LAYOUT_GENERAL, &clearColor, 1, &ezVulkanBackend::SUBRESOURCE_WHOLE);
+    vkCmdClearColorImage(cmd, smokeOldMap.handle, VK_IMAGE_LAYOUT_GENERAL, &clearColor, 1, &ezVulkanBackend::SUBRESOURCE_WHOLE);
+    vkCmdClearColorImage(cmd, pressureMap.handle, VK_IMAGE_LAYOUT_GENERAL, &clearColor, 1, &ezVulkanBackend::SUBRESOURCE_WHOLE);
     vkCmdPipelineBarrier2(cmd, &depInfo);
-    vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
-
-    if (shouldUpdate && !updated) updated = true;
-
-    vkEndCommandBuffer(cmd);
-
-    // -------------- submit to compute queueu -------------- //
-    static VkCommandBufferSubmitInfo computeBufferSubmitInfo {
-        .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-        .pNext         = nullptr,
-        .commandBuffer = cmd,
-        .deviceMask    = 0,
-    };
-    static VkSemaphoreSubmitInfo computeSemaphoreSubmitInfo {
-        .sType       = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-        .pNext       = nullptr,
-        .semaphore   = computeSemaphore,
-        .value       = 1,
-        .stageMask   = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        .deviceIndex = 0,
-    };
-    static VkSubmitInfo2 computeSubmitInfo {
-        .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .pNext                    = nullptr,
-        .flags                    = 0,
-        .waitSemaphoreInfoCount   = 0,
-        .pWaitSemaphoreInfos      = nullptr,
-        .commandBufferInfoCount   = 1,
-        .pCommandBufferInfos      = &computeBufferSubmitInfo,
-        .signalSemaphoreInfoCount = 1,
-        .pSignalSemaphoreInfos    = &computeSemaphoreSubmitInfo,
-    };
-    vkQueueSubmit2(computeQueue.handle, 1, &computeSubmitInfo, computeFence);
-
-    // ------------ graphics command buffer begin ----------- //
-    static VkCommandBufferBeginInfo graphicsCommandBufferBeginInfo {
-        .sType            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .pNext            = nullptr,
-        .flags            = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-        .pInheritanceInfo = nullptr,
-    };
-    vkResetCommandBuffer(graphicsCmd, 0);
-    vkBeginCommandBuffer(graphicsCmd, &graphicsCommandBufferBeginInfo);
-    vkEndCommandBuffer(graphicsCmd);
-
-    // -------------- submit to graphics queue -------------- //
-    static VkCommandBufferSubmitInfo graphicsBufferSubmitInfo {
-        .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-        .pNext         = nullptr,
-        .commandBuffer = graphicsCmd,
-        .deviceMask    = 0,
-    };
-    static VkSemaphoreSubmitInfo graphicsSemaphoreSubmitInfo {
-        .sType       = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-        .pNext       = nullptr,
-        .semaphore   = computeSemaphore,
-        .value       = 1,
-        .stageMask   = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-        .deviceIndex = 0,
-    };
-    static VkSubmitInfo2 graphicsSubmitInfo {
-        .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .pNext                    = nullptr,
-        .flags                    = 0,
-        .waitSemaphoreInfoCount   = 1,
-        .pWaitSemaphoreInfos      = &graphicsSemaphoreSubmitInfo,
-        .commandBufferInfoCount   = 1,
-        .pCommandBufferInfos      = &graphicsBufferSubmitInfo,
-        .signalSemaphoreInfoCount = 0,
-        .pSignalSemaphoreInfos    = nullptr,
-    };
-
-    vkQueueSubmit2(graphicsQueue.handle, 1, &graphicsSubmitInfo, nullptr);
-
-    ImGui::Begin("Controls");
-    ImGui::SliderFloat("Brush size", &controls.brushSize, 0.1f, 100.f);
-    ImGui::SliderFloat("Visualization scale", &controls.visScale, 0.001f, 10.f);
-    if (ImGui::BeginCombo("Visualization", VISUALIZATION_TYPE[controls.visType])) {
-        for (auto i = 0; i < VISUALIZATION_TYPE_COUNT; i++) {
-            if (ImGui::Selectable(VISUALIZATION_TYPE[i])) {
-                controls.visType = i;
-            }
-        }
-        ImGui::EndCombo();
-    }
-    if (ImGui::BeginCombo("Brush", BRUSH_TYPE[controls.brushType])) {
-        for (auto i = 0; i < BRUSH_TYPE_COUNT; i++) {
-            if (ImGui::Selectable(BRUSH_TYPE[i])) {
-                controls.brushType = i;
-            }
-        }
-        ImGui::EndCombo();
-    }
-    if (ImGui::Button("update")) {
-        shouldUpdate = true;
-    } else {
-        shouldUpdate = false;
-        updated      = false;
-    }
-    ImGui::Checkbox("paused", &paused);
-    ImGui::ColorPicker3("Smoke Color", (float*)&controls.brushColor);
-    ImGui::InputInt("Iterations", &iterations);
-    ImGui::InputFloat("Over relaxation", &controls.overRelaxation);
-    ImGui::End();
-}
-
-void FluidSimWindow::onMouseMoved(double xpos, double ypos) {
-    controls.brushDelta.x = xpos - controls.brushPos.x;
-    controls.brushDelta.y = SIM_BOUNDS.height - ypos - controls.brushPos.y;
-
-    controls.brushPos.x = xpos;
-    controls.brushPos.y = SIM_BOUNDS.height - ypos;
-};
-void FluidSimWindow::onMouseDown(int button, int action, int mods) {
-    ImGuiIO& io = ImGui::GetIO();
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
-        controls.brushDown = false;
-        return;
-    }
-
-    if (io.WantCaptureMouse) {
-        return;
-    }
-
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        controls.brushDown = true;
-    }
 }
 
 void FluidSimWindow::onOpen() {
@@ -486,6 +547,7 @@ void FluidSimWindow::createPipelines() {
     auto velocityUpdateShader = backend.createShader("shaders/fluid_sim_update_velocities.spv").value();
     auto visualizeShader      = backend.createShader("shaders/fluid_sim_visualize.spv").value();
     auto preProcessShader     = backend.createShader("shaders/fluid_sim_pre_process.spv").value();
+    auto diffuseShader        = backend.createShader("shaders/fluid_sim_diffuse.spv").value();
 
     projectPipeline        = backend.createComputePipeline(projectShader, pipelineLayout).value();
     advectPipeline         = backend.createComputePipeline(advectShader, pipelineLayout).value();
@@ -493,6 +555,7 @@ void FluidSimWindow::createPipelines() {
     velocityUpdatePipeline = backend.createComputePipeline(velocityUpdateShader, pipelineLayout).value();
     visualizePipeline      = backend.createComputePipeline(visualizeShader, pipelineLayout).value();
     preProcessPipeline     = backend.createComputePipeline(preProcessShader, pipelineLayout).value();
+    diffusePipeline        = backend.createComputePipeline(diffuseShader, pipelineLayout).value();
 }
 
 void FluidSimWindow::createDescriptorSets() {

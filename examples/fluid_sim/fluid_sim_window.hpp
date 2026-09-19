@@ -23,7 +23,9 @@ struct Controls {
     glm::vec3    brushColor = {1, 1, 1};
     glm::uint32  visType     = 3;
     glm::float32 visScale    = 10;
-    glm::float32 overRelaxation = 1.98;
+    glm::float32 overRelaxation = 1.97;
+    glm::float32 smokeDiffuse = 10;
+    glm::uint32  openEdges = true;
 };
 
 struct FrameData {
@@ -41,10 +43,12 @@ class FluidSimWindow : public ezWindow {
     bool shouldUpdate = false;
     bool updated = false;
     bool paused = true;
+    bool shouldClear = false;
 
     Queue    computeQueue;
     Controls controls;
-    int iterations = 100;
+    int iterations = 150;
+    bool alternateRedBlack = false;
 
     Image pressureMap;
     Image velocityXMap;
@@ -61,6 +65,7 @@ class FluidSimWindow : public ezWindow {
     PipeLine projectPipeline;
     PipeLine velocityUpdatePipeline;
     PipeLine preProcessPipeline;
+    PipeLine diffusePipeline;
 
     DescriptorSetLayout computeDSLayout;
     DescriptorPool      descriptorPool;
@@ -86,6 +91,9 @@ class FluidSimWindow : public ezWindow {
     void createCommandBuffer();
     void createSynchObjects();
     void assignDebugNames();
+
+    void blitImages(VkCommandBuffer cmd);
+    void clearImages(VkCommandBuffer cmd);
 
     Image createImage();
 
