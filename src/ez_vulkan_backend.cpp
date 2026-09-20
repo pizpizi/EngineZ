@@ -47,7 +47,7 @@ void ezVulkanBackend::init(std::vector<Queue>& deviceQueues) {
     }
     try {
         setupInstance();
-        // setupDebugMessenger();
+        setupDebugMessenger();
         auto physicalDevice = choosePhysicalDevice(deviceQueues);
         device              = setupLogicalDevice(deviceQueues, physicalDevice);
         setupAllocator();
@@ -66,8 +66,8 @@ void ezVulkanBackend::setupInstance() {
 
     // ------------------------- data ------------------------ //
     vector<const char*> requiredInstanceExtensions = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
-    vector<const char*> requiredInstanceLayers     = {};
-    // "VK_LAYER_KHRONOS_validation"
+    vector<const char*> requiredInstanceLayers     = {"VK_LAYER_KHRONOS_validation"};
+    // 
 
     uint32_t                      availableExtentsionCount;
     vector<VkExtensionProperties> availableExtensions;

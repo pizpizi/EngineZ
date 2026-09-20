@@ -22,8 +22,8 @@ int main() {
         .presentQueue  = queues[2],
         .engine        = engine,
         .title         = "Fluid Sim",
-        .width         = 1920,
-        .height        = 1200,
+        .width         = 400,
+        .height        = 480,
     };
 
     FluidSimWindow window(windowCreateInfo, queues[0]);

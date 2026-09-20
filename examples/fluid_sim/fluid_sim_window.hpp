@@ -17,13 +17,13 @@ struct Controls {
     glm::vec2    brushDelta = {0, 0};
     glm::int32   redBlackIdx = 0;
     glm::float32 brushSize   = 1;
-    glm::ivec2   simBounds   = {1920, 1200};
+    glm::ivec2   simBounds   = {900, 400};
     glm::uint32  brushDown   = false;
     glm::uint32  brushType   = 0;
     glm::vec3    brushColor = {1, 1, 1};
     glm::uint32  visType     = 3;
     glm::float32 visScale    = 10;
-    glm::float32 overRelaxation = 1.97;
+    glm::float32 overRelaxation = 1.8;
     glm::float32 smokeDiffuse = 10;
     glm::uint32  openEdges = true;
 };
@@ -34,11 +34,11 @@ struct FrameData {
 
 class FluidSimWindow : public ezWindow {
   private:
-    inline static VkExtent3D  SIM_BOUNDS {1920, 1200, 1};
+    inline static VkExtent3D  SIM_BOUNDS {900, 400, 1};
     inline static const char* VISUALIZATION_TYPE[]     = {"Pressure", "Velocity", "Divergence", "Smoke"};
     inline static const int   VISUALIZATION_TYPE_COUNT = 4;
-    inline static const char* BRUSH_TYPE[]             = {"Smoke", "Pressure"};
-    inline static const int   BRUSH_TYPE_COUNT         = 2;
+    inline static const char* BRUSH_TYPE[]             = {"Smoke", "Pressure", "Solidity"};
+    inline static const int   BRUSH_TYPE_COUNT         = 3;
 
     bool shouldUpdate = false;
     bool updated = false;
@@ -58,6 +58,7 @@ class FluidSimWindow : public ezWindow {
     Image smokeMap;
     Image smokeOldMap;
     Image divergenceMap;
+    Image solidityMap;
 
     PipeLine brushPipeline;
     PipeLine advectPipeline;

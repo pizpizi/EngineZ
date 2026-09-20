@@ -216,7 +216,7 @@ void FluidSimWindow::draw(Image& drawImage) {
 
     ImGui::Begin("Controls");
     ImGui::SliderFloat("Brush size", &controls.brushSize, 0.1f, 100.f);
-    ImGui::SliderFloat("Visualization scale", &controls.visScale, 0.001f, 10.f);
+    ImGui::SliderFloat("Visualization scale", &controls.visScale, 0.001f, 1000.f);
     if (ImGui::BeginCombo("Visualization", VISUALIZATION_TYPE[controls.visType])) {
         for (auto i = 0; i < VISUALIZATION_TYPE_COUNT; i++) {
             if (ImGui::Selectable(VISUALIZATION_TYPE[i])) {
@@ -481,6 +481,7 @@ void FluidSimWindow::clearImages(VkCommandBuffer cmd) {
     vkCmdClearColorImage(cmd, smokeMap.handle, VK_IMAGE_LAYOUT_GENERAL, &clearColor, 1, &ezVulkanBackend::SUBRESOURCE_WHOLE);
     vkCmdClearColorImage(cmd, smokeOldMap.handle, VK_IMAGE_LAYOUT_GENERAL, &clearColor, 1, &ezVulkanBackend::SUBRESOURCE_WHOLE);
     vkCmdClearColorImage(cmd, pressureMap.handle, VK_IMAGE_LAYOUT_GENERAL, &clearColor, 1, &ezVulkanBackend::SUBRESOURCE_WHOLE);
+    vkCmdClearColorImage(cmd, solidityMap.handle, VK_IMAGE_LAYOUT_GENERAL, &clearColor, 1, &ezVulkanBackend::SUBRESOURCE_WHOLE);
     vkCmdPipelineBarrier2(cmd, &depInfo);
 }
 
@@ -505,9 +506,12 @@ void FluidSimWindow::createImages() {
     imageBuilder.addFamily(computeQueue.family)
         .setFormat(VK_FORMAT_R32_SFLOAT)
         .setExtent(SIM_BOUNDS)
-        .setUsage(VK_IMAGE_USAGE_STORAGE_BIT)
+        .setUsage(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
         .build(pressureMap)
         .build(divergenceMap)
+
+        .setFormat(VK_FORMAT_R8_UINT)
+        .build(solidityMap)
 
         .setUsage(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
         .setFormat(VK_FORMAT_R16G16B16A16_SFLOAT)
@@ -528,6 +532,7 @@ void FluidSimWindow::createPipelines() {
     ezPipelineLayoutBuilder      pipelineLayoutBuilder(backend);
 
     descriptorSetLayoutBuilder.addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+        .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
         .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
         .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
         .addBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
@@ -561,7 +566,7 @@ void FluidSimWindow::createPipelines() {
 void FluidSimWindow::createDescriptorSets() {
     backend.allocateDescriptorSets(descriptorPool, 1, computeDSLayout, &computeDS);
 
-    VkDescriptorImageInfo imageInfo[8] = {
+    VkDescriptorImageInfo imageInfo[9] = {
         VkDescriptorImageInfo {
             .sampler     = nullptr,
             .imageView   = pressureMap.view,
@@ -602,9 +607,14 @@ void FluidSimWindow::createDescriptorSets() {
             .imageView   = divergenceMap.view,
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         },
+        VkDescriptorImageInfo {
+            .sampler     = nullptr,
+            .imageView   = solidityMap.view,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        },
     };
 
-    VkWriteDescriptorSet write[8] = {
+    VkWriteDescriptorSet write[9] = {
         VkWriteDescriptorSet {
             .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstSet          = computeDS,
@@ -677,9 +687,18 @@ void FluidSimWindow::createDescriptorSets() {
             .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
             .pImageInfo      = imageInfo + 7,
         },
+        VkWriteDescriptorSet {
+            .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet          = computeDS,
+            .dstBinding      = 9,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .pImageInfo      = imageInfo + 8,
+        },
     };
 
-    backend.updateDescriptorSets(8, write, 0, nullptr);
+    backend.updateDescriptorSets(9, write, 0, nullptr);
 }
 void FluidSimWindow::createDescriptorPool() {
     vector<VkDescriptorPoolSize> poolSize = {
