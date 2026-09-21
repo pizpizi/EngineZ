@@ -1,12 +1,13 @@
-[[vk::binding(0, 0)]] RWTexture2D<float> pressure;
-[[vk::binding(1, 0)]] RWTexture2D<float> velocityX;
-[[vk::binding(5, 0)]] RWTexture2D<float> oldVelocityX;
-[[vk::binding(2, 0)]] RWTexture2D<float> velocityY;
-[[vk::binding(6, 0)]] RWTexture2D<float> oldVelocityY;
-[[vk::binding(8, 0)]] RWTexture2D<float> divergence;
-[[vk::binding(9, 0)]] [[vk::image_format("r8ui")]] RWTexture2D<uint> solidity;
-[[vk::binding(4, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> smoke;
-[[vk::binding(7, 0)]] [[vk::image_format("rgba16f")]]     RWTexture2D<float4>   oldSmoke;
+[[vk::binding(0, 0)]] RWTexture2D<float> tex_pressure;
+[[vk::binding(1, 0)]] RWTexture2D<float> tex_velocityX;
+[[vk::binding(5, 0)]] RWTexture2D<float> tex_oldVelocityX;
+[[vk::binding(2, 0)]] RWTexture2D<float> tex_velocityY;
+[[vk::binding(6, 0)]] RWTexture2D<float> tex_oldVelocityY;
+[[vk::binding(8, 0)]] RWTexture2D<float> tex_divergence;
+[[vk::binding(9, 0)]] [[vk::image_format("r8ui")]] RWTexture2D<uint> tex_cellType;
+[[vk::binding(10, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> tex_cellData;
+[[vk::binding(4, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> tex_smoke;
+[[vk::binding(7, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> tex_oldSmoke;
 
 [[vk::binding(3, 0)]] RWTexture2D<float4> drawImage;
 
@@ -21,9 +22,9 @@ static const uint BRUSH_SOLID = 2u;
 
 static const uint CELL_AIR = 0u;
 static const uint CELL_SOLID = 1u;
-static const uint CELL_SMOKE_SOURCE = 2u;
-static const uint CELL_VELOCITY_SOURCE = 3u;
-static const uint CELL_PRESSURE_SOURCE = 4u;
+static const uint CELL_SMOKE = 2u;
+static const uint CELL_VELOCITY = 3u;
+static const uint CELL_PRESSURE = 4u;
 
 struct Constants {
     float  deltaTime;
@@ -44,7 +45,7 @@ struct Constants {
     float  cellSize;
     bool   openEdges;
     uint   cellType;
-    float4 cellDetails;
+    float4 cellData;
 };
 
 [[vk::push_constant]]
@@ -321,41 +322,47 @@ void main(uint3 id : SV_DispatchThreadID) {
             switch (constants.brushType) {
                 case BRUSH_PRESSURE:
                 {
-                    velocityX[coord] += centerFraction * constants.brushDelta.x * 10;
-                    velocityX[int2(coord.x + 1, coord.y)] += centerFraction * constants.brushDelta.x * 10;
-                    velocityY[coord] += centerFraction * constants.brushDelta.y * 10;
-                    velocityY[int2(coord.x, coord.y + 1)] += centerFraction * constants.brushDelta.y * 10;
+                    tex_velocityX[coord] += centerFraction * constants.brushDelta.x * 10;
+                    tex_velocityX[int2(coord.x + 1, coord.y)] += centerFraction * constants.brushDelta.x * 10;
+                    tex_velocityY[coord] += centerFraction * constants.brushDelta.y * 10;
+                    tex_velocityY[int2(coord.x, coord.y + 1)] += centerFraction * constants.brushDelta.y * 10;
                     break;
                 }
                 case BRUSH_SMOKE:
                 {
-                    smoke[coord] += float4(constants.brushColor.xyz * centerFraction * constants.deltaTime, 0.0);
+                    tex_smoke[coord] += float4(constants.brushColor.xyz * centerFraction * constants.deltaTime, 0.0);
                     break;
                 }
                 case BRUSH_SOLID:
                 {
-                    solidity[coord] = 1;
+                    tex_cellType[coord] = constants.cellType;
+                    tex_cellData[coord] = constants.cellData;
                     break;
                 }
             }
         }
     }
 
-    if(coord.x <= 10) {
-        velocityX[coord] = 100;
-        velocityX[int2(coord.x + 1, coord.y)] = 100;
-    }
+    uint c_cellType = tex_cellType[coord];
+    if (c_cellType == CELL_SMOKE) {
+        tex_smoke[coord] = tex_cellData[coord];
+    } else if (c_cellType == CELL_PRESSURE) {
+        tex_pressure[coord] = tex_cellData[coord].x;
+    } else if (c_cellType == CELL_VELOCITY) {
+        bool l_exist = (coord.x != 0);
+        bool r_exist = (coord.x != constants.simBounds.x - 1);
+        bool b_exist = (coord.y != 0);
+        bool t_exist = (coord.y != constants.simBounds.y - 1);
 
-    // if(length(coord - float2(100 , constants.simBounds.y / 2)) < 20) {
-    //     solidity[coord] = 1;
-    // }
+        uint l_cellType = (coord.x != 0) ? (tex_cellType[coord + int2(-1, 0)]) : CELL_AIR;
+        uint r_cellType = r_exist ? (tex_cellType[coord + int2(1, 0)] ) : CELL_AIR;
+        uint b_cellType = b_exist ? (tex_cellType[coord + int2(0, -1)]) : CELL_AIR;
+        uint t_cellType = t_exist ? (tex_cellType[coord + int2(0, 1)] ) : CELL_AIR;
 
-    if(coord.y == 0 || coord.y == constants.simBounds.y - 1) {
-        solidity[coord] = 1;
-    }
-
-    if( abs(coord.x - 10) < 5) {
-        smoke[coord] = float4(1.0, 1.0, 1.0, 1.0);
+        tex_velocityY[coord] = tex_cellData[coord].x;
+        tex_velocityY[coord + int2(0, 1)] = tex_cellData[coord].x;
+        tex_velocityX[coord + int2(1, 0)] = tex_cellData[coord].y;
+        tex_velocityX[coord] = tex_cellData[coord].y;
     }
 }
 #endif
@@ -371,33 +378,61 @@ void main(uint3 id : SV_DispatchThreadID) {
     if (coord.x >= constants.simBounds.x || coord.y >= constants.simBounds.y)
         return;
 
-    float2 leftEdgePos = float2(coord.x, coord.y + 0.5) * constants.cellSize;
-    float2 leftEdgeVelocity = float2(sampleVelocityX(oldVelocityX, leftEdgePos), sampleVelocityY(oldVelocityY, leftEdgePos));
-    float2 leftEdgePrevPos = leftEdgePos - constants.deltaTime * leftEdgeVelocity;
-    velocityX[coord] = sampleVelocityX(oldVelocityX, leftEdgePrevPos);
 
-    float2 bottomEdgePos = float2(coord.x + 0.5, coord.y) * constants.cellSize;
-    float2 bottomEdgeVelocity = float2(sampleVelocityX(oldVelocityX, bottomEdgePos), sampleVelocityY(oldVelocityY, bottomEdgePos));
-    float2 bottomEdgePrevPos = bottomEdgePos - constants.deltaTime * bottomEdgeVelocity;
-    velocityY[coord] = sampleVelocityY(oldVelocityY, bottomEdgePrevPos);
+    uint c_cellType = tex_cellType[coord];
+
+    bool l_exist = (coord.x != 0);
+    uint l_cellType = l_exist ? tex_cellType[coord + int2(-1, 0)] : CELL_AIR;
+    if(c_cellType == CELL_SOLID || l_cellType == CELL_SOLID) {
+        tex_velocityX[coord] = 0.0;
+    } else if (c_cellType != CELL_VELOCITY && l_cellType != CELL_VELOCITY) {
+        float2 l_edgePos = float2(coord.x, coord.y + 0.5) * constants.cellSize;
+        float2 l_edgeVelocity = float2(sampleVelocityX(tex_oldVelocityX, l_edgePos), sampleVelocityY(tex_oldVelocityY, l_edgePos));
+        float2 l_edgePrevPos = l_edgePos - constants.deltaTime * l_edgeVelocity;
+        tex_velocityX[coord] = sampleVelocityX(tex_oldVelocityX, l_edgePrevPos);
+    }
+
+    bool b_exist = (coord.y != 0);
+    uint b_cellType = b_exist ? tex_cellType[coord + int2(0, -1)] : CELL_AIR;
+    if(c_cellType == CELL_SOLID || b_cellType == CELL_SOLID) {
+        tex_velocityY[coord] = 0.0;
+    } else if (c_cellType != CELL_VELOCITY && b_cellType != CELL_VELOCITY) {
+        float2 bottomEdgePos = float2(coord.x + 0.5, coord.y) * constants.cellSize;
+        float2 bottomEdgeVelocity = float2(sampleVelocityX(tex_oldVelocityX, bottomEdgePos), sampleVelocityY(tex_oldVelocityY, bottomEdgePos));
+        float2 bottomEdgePrevPos = bottomEdgePos - constants.deltaTime * bottomEdgeVelocity;
+        tex_velocityY[coord] = sampleVelocityY(tex_oldVelocityY, bottomEdgePrevPos);
+    }
 
     if(coord.x == constants.simBounds.x - 1) {
-        float2 rightEdgePos = float2(coord.x + 1, coord.y + 0.5) * constants.cellSize;
-        float2 rightEdgeVelocity = float2(sampleVelocityX(oldVelocityX, rightEdgePos), sampleVelocityY(oldVelocityY, rightEdgePos));
-        float2 rightEdgePrevPos = rightEdgePos - constants.deltaTime * rightEdgeVelocity;
-        velocityX[int2(coord.x + 1, coord.y)] = sampleVelocityX(oldVelocityX, rightEdgePrevPos);
-    }
-    if(coord.y == constants.simBounds.y - 1) {
-        float2 topEdgePos = float2(coord.x + 0.5, coord.y + 1) * constants.cellSize;
-        float2 topEdgeVelocity = float2(sampleVelocityX(oldVelocityX, topEdgePos), sampleVelocityY(oldVelocityY, topEdgePos));
-        float2 topEdgePrevPos = topEdgePos - constants.deltaTime * topEdgeVelocity;
-        velocityY[int2(coord.x, coord.y + 1)] = sampleVelocityY(oldVelocityY, topEdgePrevPos);
+        bool r_exist = (coord.x != constants.simBounds.x - 1);
+        uint r_cellType = r_exist ? tex_cellType[coord + int2(1, 0)] : CELL_AIR;
+        if(c_cellType == CELL_SOLID || r_cellType == CELL_SOLID) {
+            tex_velocityY[coord + int2(1, 0)] = 0.0;
+        } else if (c_cellType != CELL_VELOCITY && r_cellType != CELL_VELOCITY) {
+            float2 r_edgePos = float2(coord.x + 1, coord.y + 0.5) * constants.cellSize;
+            float2 r_edgeVelocity = float2(sampleVelocityX(tex_oldVelocityX, r_edgePos), sampleVelocityY(tex_oldVelocityY, r_edgePos));
+            float2 r_edgePrevPos = r_edgePos - constants.deltaTime * r_edgeVelocity;
+            tex_velocityX[coord + int2(1, 0)] = sampleVelocityX(tex_oldVelocityX, r_edgePrevPos);
+        }
     }
 
-    float2 centerPos = float2(coord.x + 0.5, coord.y + 0.5) * constants.cellSize;
-    float2 centerVelocity = float2(sampleVelocityX(oldVelocityX, centerPos), sampleVelocityY(oldVelocityY, centerPos));
-    float2 centerPrevPos = centerPos - constants.deltaTime * centerVelocity;
-    smoke[coord] = sampleProperty(oldSmoke, centerPrevPos);
+    if(coord.y == constants.simBounds.y - 1) {
+        bool t_exist = (coord.y != constants.simBounds.y - 1);
+        uint t_cellType = t_exist ? tex_cellType[coord + int2(0, 1)] : CELL_AIR;
+        if(c_cellType == CELL_SOLID || t_cellType == CELL_SOLID) {
+            tex_velocityY[coord + int2(0, 1)] = 0.0;
+        } else if (c_cellType != CELL_VELOCITY && t_cellType != CELL_VELOCITY) {
+            float2 t_edgePos = float2(coord.x + 0.5, coord.y + 1) * constants.cellSize;
+            float2 t_edgeVelocity = float2(sampleVelocityX(tex_oldVelocityX, t_edgePos), sampleVelocityY(tex_oldVelocityY, t_edgePos));
+            float2 t_edgePrevPos = t_edgePos - constants.deltaTime * t_edgeVelocity;
+            tex_velocityY[coord + int2(0, 1)] = sampleVelocityY(tex_oldVelocityY, t_edgePrevPos);
+        }
+    }
+
+    float2 c_pos = float2(coord.x + 0.5, coord.y + 0.5) * constants.cellSize;
+    float2 c_velocity = float2(sampleVelocityX(tex_oldVelocityX, c_pos), sampleVelocityY(tex_oldVelocityY, c_pos));
+    float2 c_prevPos = c_pos - constants.deltaTime * c_velocity;
+    tex_smoke[coord] = sampleProperty(tex_oldSmoke, c_prevPos);
 }
 #endif
 
@@ -412,20 +447,26 @@ void main(uint3 id : SV_DispatchThreadID) {
     if (coord.x >= constants.simBounds.x || coord.y >= constants.simBounds.y)
         return;
     
-    bool leftExist  = (coord.x != 0);
-    bool rightExist = (coord.x != constants.simBounds.x - 1);
-    bool downExist  = (coord.y != 0);
-    bool upExist    = (coord.y != constants.simBounds.y - 1);
+    bool l_exist = (coord.x != 0);
+    bool r_xist  = (coord.x != constants.simBounds.x - 1);
+    bool b_xist  = (coord.y != 0);
+    bool t_xist  = (coord.y != constants.simBounds.y - 1);
 
-    float4 smokeCenter = oldSmoke[coord];
+    uint c_cellType = tex_cellType[coord];
+    if(c_cellType == CELL_SOLID) {
+        tex_smoke[coord] = float4(0.0, 0.0, 0.0, 0.0);
+        return;
+    }
+
+    float4 smokeCenter = tex_oldSmoke[coord];
     float4 outsideSmoke = constants.openEdges ? 0.0 : smokeCenter;
 
-    float4 smokeUp = upExist ? oldSmoke[int2(coord.x, coord.y + 1)] : outsideSmoke;
-    float4 smokeDown = downExist ? oldSmoke[int2(coord.x, coord.y - 1)] : outsideSmoke;
-    float4 smokeRight = rightExist ? oldSmoke[int2(coord.x + 1, coord.y)] : outsideSmoke;
-    float4 smokeLeft = leftExist ? oldSmoke[int2(coord.x - 1, coord.y)] : outsideSmoke;
+    float4 smokeUp = t_xist ? tex_oldSmoke[int2(coord.x, coord.y + 1)] : outsideSmoke;
+    float4 smokeDown = b_xist ? tex_oldSmoke[int2(coord.x, coord.y - 1)] : outsideSmoke;
+    float4 smokeRight = r_xist ? tex_oldSmoke[int2(coord.x + 1, coord.y)] : outsideSmoke;
+    float4 smokeLeft = l_exist ? tex_oldSmoke[int2(coord.x - 1, coord.y)] : outsideSmoke;
 
-    smoke[coord] = smokeCenter + 
+    tex_smoke[coord] = smokeCenter + 
         (constants.deltaTime * constants.smokeDiffusion) * 
         (smokeUp + smokeDown + smokeRight + smokeLeft - 4 * smokeCenter)
         / (constants.cellSize * constants.cellSize);
@@ -443,31 +484,36 @@ void main(uint3 id : SV_DispatchThreadID) {
     if (coord.x >= constants.simBounds.x || coord.y >= constants.simBounds.y)
         return;
 
-    bool leftExist  = (coord.x != 0);
-    bool rightExist = (coord.x != constants.simBounds.x - 1);
-    bool downExist  = (coord.y != 0);
-    bool upExist    = (coord.y != constants.simBounds.y - 1);
+    bool l_exist = (coord.x != 0);
+    bool r_exist = (coord.x != constants.simBounds.x - 1);
+    bool b_exist = (coord.y != 0);
+    bool t_exist = (coord.y != constants.simBounds.y - 1);
 
-    bool centerSolid  = solidity[coord];
+    uint c_cellType = tex_cellType[coord];
+    uint l_cellType = l_exist ? (tex_cellType[coord + int2(-1, 0)]) : CELL_AIR;
+    uint r_cellType = r_exist ? (tex_cellType[coord + int2(1, 0)] ) : CELL_AIR;
+    uint b_cellType = b_exist ? (tex_cellType[coord + int2(0, -1)]) : CELL_AIR;
+    uint t_cellType = t_exist ? (tex_cellType[coord + int2(0, 1)] ) : CELL_AIR;
 
-    bool leftSolid  = leftExist  ? solidity[coord + int2(-1, 0)] : !(constants.openEdges || (coord.x != 0));
-    bool rightSolid = rightExist ? solidity[coord + int2(1, 0)]  : !(constants.openEdges || (coord.x != constants.simBounds.x - 1));
-    bool downSolid  = downExist  ? solidity[coord + int2(0, -1)] : !(constants.openEdges || (coord.y != 0));
-    bool upSolid    = upExist    ? solidity[coord + int2(0, 1)]  : !(constants.openEdges || (coord.y != constants.simBounds.y - 1));
+    bool c_solid = (c_cellType == CELL_SOLID) || (c_cellType == CELL_PRESSURE);
+    bool l_solid = l_cellType == CELL_SOLID;
+    bool r_solid = r_cellType == CELL_SOLID;
+    bool b_solid = b_cellType == CELL_SOLID;
+    bool t_solid = t_cellType == CELL_SOLID;
 
-    float uLeft   = !leftSolid  ? velocityX[coord]                 : 0.0;
-    float uRight  = !rightSolid ? velocityX[coord + int2(1, 0)]    : 0.0;
-    float uUp     = !upSolid    ? velocityY[coord + int2(0, 1)]    : 0.0;
-    float uDown   = !downSolid  ? velocityY[coord]                 : 0.0;
+    float l_speed = tex_velocityX[coord];
+    float r_speed = tex_velocityX[coord + int2(1, 0)];
+    float t_speed = tex_velocityY[coord + int2(0, 1)];
+    float b_speed = tex_velocityY[coord];
 
-    uint d = asuint(-constants.density * constants.cellSize / constants.deltaTime * (uRight - uLeft + uUp - uDown)) & 0xFFFFFFE0;
-    d |= int(centerSolid);
-    d |= int(leftSolid) << 1;
-    d |= int(rightSolid) << 2;
-    d |= int(downSolid) << 3;
-    d |= int(upSolid) << 4;
+    uint d = asuint(-constants.density * constants.cellSize / constants.deltaTime * (r_speed - l_speed + t_speed - b_speed)) & 0xFFFFFFE0;
+    d |= int(c_solid);
+    d |= int(l_solid) << 1;
+    d |= int(r_solid) << 2;
+    d |= int(b_solid) << 3;
+    d |= int(t_solid) << 4;
 
-    divergence[coord] = asfloat(d);
+    tex_divergence[coord] = asfloat(d);
 }
 #endif
 
@@ -482,35 +528,35 @@ void main(uint3 id : SV_DispatchThreadID) {
     if (coord.x >= constants.simBounds.x || coord.y >= constants.simBounds.y)
         return;
 
-    uint raw = asuint(divergence[coord]);
-    float div = asfloat(raw & 0xFFFFFFE0);
+    uint raw = asuint(tex_divergence[coord]);
+    float divergence = asfloat(raw & 0xFFFFFFE0);
     
-    bool leftSolid  = bool(raw & 2);
-    bool rightSolid = bool(raw & 4);
-    bool downSolid  = bool(raw & 8);
-    bool upSolid    = bool(raw & 16);
+    bool l_solid = bool(raw & 2);
+    bool r_solid = bool(raw & 4);
+    bool b_solid = bool(raw & 8);
+    bool t_solid = bool(raw & 16);
 
     if(raw & 1) return;
     
-    int neighboursNum = int(!leftSolid) + int(!rightSolid) + int(!downSolid) + int(!upSolid);
+    int neighboursNum = int(!l_solid) + int(!r_solid) + int(!b_solid) + int(!t_solid);
     if(neighboursNum == 0) return;
 
-    bool leftExist  = (coord.x != 0);
-    bool rightExist = (coord.x != constants.simBounds.x - 1);
-    bool downExist  = (coord.y != 0);
-    bool upExist    = (coord.y != constants.simBounds.y - 1);
+    bool l_exist = (coord.x != 0);
+    bool r_xist  = (coord.x != constants.simBounds.x - 1);
+    bool b_exist = (coord.y != 0);
+    bool t_exist = (coord.y != constants.simBounds.y - 1);
 
-    float pCenter = pressure[coord];
+    float pCenter = tex_pressure[coord];
     float pOutside = -pCenter;
 
-    float pDown  = downSolid  ? 0.0 : (downExist  ? pressure[int2(coord.x, coord.y - 1)] : pOutside);
-    float pUp    = upSolid    ? 0.0 : (upExist    ? pressure[int2(coord.x, coord.y + 1)] : pOutside);
-    float pRight = rightSolid ? 0.0 : (rightExist ? pressure[int2(coord.x + 1, coord.y)] : pOutside);
-    float pLeft  = leftSolid  ? 0.0 : (leftExist  ? pressure[int2(coord.x - 1, coord.y)] : pOutside);
+    float b_p = b_solid ? 0.0 : (b_exist   ? tex_pressure[int2(coord.x, coord.y - 1)] : pOutside);
+    float t_p = t_solid ? 0.0 : (t_exist   ? tex_pressure[int2(coord.x, coord.y + 1)] : pOutside);
+    float r_p = r_solid ? 0.0 : (r_xist    ? tex_pressure[int2(coord.x + 1, coord.y)] : pOutside);
+    float l_p = l_solid ? 0.0 : (l_exist   ? tex_pressure[int2(coord.x - 1, coord.y)] : pOutside);
 
-    float newPressure = ((div) + pDown + pLeft + pRight + pUp) / float(neighboursNum);
+    float newPressure = ((divergence) + b_p + l_p + r_p + t_p) / float(neighboursNum);
 
-    pressure[coord] = lerp(pCenter, newPressure, constants.overRelaxation);
+    tex_pressure[coord] = lerp(pCenter, newPressure, constants.overRelaxation);
 }
 #endif
 
@@ -525,42 +571,59 @@ void main(uint3 id : SV_DispatchThreadID) {
     if (coord.x >= constants.simBounds.x || coord.y >= constants.simBounds.y)
         return;
 
-    bool centerSolid = solidity[coord] != 0;
+    bool c_solid = tex_cellType[coord] != 0;
 
     float alpha = constants.deltaTime / (constants.density * constants.cellSize);
 
-    float pCenter = pressure[coord];
-    float pOutside = constants.openEdges ? -pCenter : pCenter; 
+    float c_pressure = tex_pressure[coord];
+    uint c_cellType = tex_cellType[coord];
+    float outside_pressure = -c_pressure; 
 
-    bool downExist   = (coord.y != 0);
-    bool downSolid   = downExist ? solidity[coord + int2(0, -1)] : !constants.openEdges;
-    float pDown      = downExist ? pressure[int2(coord.x, coord.y - 1)] : pOutside;
-    float uDown      = velocityY[coord];
-    float uDownNew   = (!downSolid && !centerSolid) ? uDown - alpha * (pCenter - pDown) : 0.0;
-    velocityY[coord] = uDownNew;
+    bool b_exist = (coord.y != 0);
+    uint b_cellType = b_exist ? tex_cellType[coord + int2(0, -1)] : CELL_AIR;
+    if(b_cellType == CELL_SOLID || c_cellType == CELL_SOLID) {
+        tex_velocityY[coord] = 0.0;
+    } else if (c_cellType != CELL_VELOCITY && b_cellType != CELL_VELOCITY) {
+        float b_pressure = b_exist ? tex_pressure[coord + int2(0, -1)] : outside_pressure;
+        float b_speed    = tex_velocityY[coord];
 
-    bool leftExist   = (coord.x != 0);
-    bool leftSolid   = leftExist ? solidity[coord + int2(-1, 0)] : !constants.openEdges;
-    float pLeft      = leftExist ? pressure[int2(coord.x - 1, coord.y)] : pOutside;
-    float uLeft      = velocityX[coord];
-    float uLeftNew   = (!leftSolid && !centerSolid) ? uLeft - alpha * (pCenter - pLeft) : 0;
-    velocityX[coord] = uLeftNew;
+        tex_velocityY[coord] = b_speed - alpha * (c_pressure - b_pressure);
+    }
+
+    bool l_exist    = (coord.x != 0);
+    uint l_cellType = l_exist ? tex_cellType[coord + int2(-1, 0)] : CELL_AIR;
+    if(l_cellType == CELL_SOLID || c_cellType == CELL_SOLID) {
+        tex_velocityX[coord] = 0.0;
+    } else if (c_cellType != CELL_VELOCITY && l_cellType != CELL_VELOCITY) {
+        float l_pressure = l_exist ? tex_pressure[coord + int2(-1, 0)] : outside_pressure;
+        float l_speed = tex_velocityX[coord];
+
+        tex_velocityX[coord] = l_speed - alpha * (c_pressure - l_pressure);
+    }
 
     if(coord.x == constants.simBounds.x - 1) {
-        bool rightExist = (coord.x != constants.simBounds.x - 1);
-        bool rightSolid = rightExist ? solidity[coord + int2(1, 0)]  : !constants.openEdges;
-        float pRight    = rightExist ? pressure[int2(coord.x + 1, coord.y)] : pOutside;
-        float uRight    = velocityX[coord + int2(1, 0)];
-        float uRightNew = (!rightSolid && !centerSolid) ? uRight - alpha * (pRight - pCenter) : 0;
-        velocityX[int2(coord.x + 1, coord.y)] = uRightNew;
+        bool r_exist    = (coord.x != constants.simBounds.x - 1);
+        uint r_cellType = r_exist ? tex_cellType[coord + int2(1, 0)] : CELL_AIR;
+        if(r_cellType == CELL_SOLID || c_cellType == CELL_SOLID) {
+            tex_velocityX[coord + int2(1, 0)] = 0.0;
+        } else if (c_cellType != CELL_VELOCITY && r_cellType != CELL_VELOCITY) {
+            float r_pressure = r_exist ? tex_pressure[coord + int2(1, 0)] : outside_pressure;
+            float r_speed = tex_velocityX[coord + int2(1, 0)];
+
+            tex_velocityX[coord + int2(1, 0)] = r_speed - alpha * (r_pressure - c_pressure);
+        }
     }
     if(coord.y == constants.simBounds.y - 1) {
-        bool upExist = (coord.y != constants.simBounds.y - 1);
-        bool upSolid = upExist    ? solidity[coord + int2(0, 1)]  : !constants.openEdges;
-        float pUp    = upExist ? pressure[int2(coord.x, coord.y + 1)] : pOutside;
-        float uUp    = velocityY[coord + int2(0, 1)];
-        float uUpNew = (!upSolid && !centerSolid) ? uUp - alpha * (pUp - pCenter) : 0.0;
-        velocityY[int2(coord.x, coord.y + 1)] = uUpNew;
+        bool t_exist    = (coord.y != constants.simBounds.y - 1);
+        uint t_cellType = t_exist ? tex_cellType[coord + int2(0, 1)] : CELL_AIR;
+        if(t_cellType == CELL_SOLID || c_cellType == CELL_SOLID) {
+            tex_velocityY[coord + int2(0, 1)] = 0.0;
+        } else if (c_cellType != CELL_VELOCITY && t_cellType != CELL_VELOCITY) {
+            float t_pressure = t_exist ? tex_pressure[coord + int2(0, 1)] : outside_pressure;
+            float t_speed = tex_velocityY[coord + int2(0, 1)];
+
+            tex_velocityY[coord + int2(0, 1)] = t_speed - alpha * (t_pressure - c_pressure);
+        }
     }
 }
 #endif
@@ -617,14 +680,14 @@ void main(uint3 id : SV_DispatchThreadID) {
     switch (constants.visType) {
         case VISUALIZE_PRESSURE:
         {
-            float p = sampleProperty1(pressure, pos) / constants.visScale;
+            float p = sampleProperty1(tex_pressure, pos) / constants.visScale;
             outColor = (p >= 0.0) ? float4(p, 0.0, 0.0, 1.0) : float4(0.0, 0.0, -p, 1.0);
             break;
         }
         case VISUALIZE_VELOCITY:
         {
-            float u = sampleVelocityX(velocityX, pos);
-            float v = sampleVelocityY(velocityY, pos);
+            float u = sampleVelocityX(tex_velocityX, pos);
+            float v = sampleVelocityY(tex_velocityY, pos);
 
             float speed = length(float2(u, v));
             float t = speed / max(constants.visScale, 0.0001);
@@ -636,10 +699,10 @@ void main(uint3 id : SV_DispatchThreadID) {
         }
         case VISUALIZE_DIVERGENCE:
         {
-            float uLeft  = sampleVelocityX(velocityX, pos);
-            float uRight = sampleVelocityX(velocityX, pos + float2(constants.cellSize, 0.0));
-            float uDown  = sampleVelocityY(velocityY, pos);
-            float uUp    = sampleVelocityY(velocityY, pos + float2(0.0, constants.cellSize));
+            float uLeft  = sampleVelocityX(tex_velocityX, pos);
+            float uRight = sampleVelocityX(tex_velocityX, pos + float2(constants.cellSize, 0.0));
+            float uDown  = sampleVelocityY(tex_velocityY, pos);
+            float uUp    = sampleVelocityY(tex_velocityY, pos + float2(0.0, constants.cellSize));
 
             float div = (uRight - uLeft) + (uUp - uDown);
             float d = div / max(constants.visScale, 0.0001f);
@@ -648,12 +711,12 @@ void main(uint3 id : SV_DispatchThreadID) {
         }
         case VISUALIZE_SMOKE:
         {
-            outColor = float4(sampleProperty(smoke, pos).xyz, 0.0);
+            outColor = float4(sampleProperty(tex_smoke, pos).xyz, 1.0);
             break;
         }
     }
 
-    float cellType = sampleProperty2(solidity, pos);
+    float cellType = sampleProperty2(tex_cellType, pos);
     if(cellType >= 0.001) {
         outColor = float4(cellType, cellType, cellType, 1.0);
     }

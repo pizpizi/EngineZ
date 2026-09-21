@@ -11,25 +11,25 @@ using namespace enginez;
 using namespace enginez::graphics;
 
 struct Controls {
-    glm::float32 deltaTime   = 1.0 / 165;
-    glm::float32 density     = 0.01;
-    glm::vec2    brushPos    = {0, 0};
-    glm::vec2    brushDelta = {0, 0};
-    glm::int32   redBlackIdx = 0;
-    glm::float32 brushSize   = 1;
-    glm::ivec2   simBounds   = {960, 600};
-    glm::uint32  brushDown   = false;
-    glm::uint32  brushType   = 0;
-    glm::vec3    brushColor = {1, 1, 1};
-    glm::uint32  visType     = 3;
-    glm::ivec2   drawBounds  = {0, 0};
-    glm::float32 visScale    = 10;
+    glm::float32 deltaTime      = 1.0 / 165;
+    glm::float32 density        = 0.01;
+    glm::vec2    brushPos       = {0, 0};
+    glm::vec2    brushDelta     = {0, 0};
+    glm::int32   redBlackIdx    = 0;
+    glm::float32 brushSize      = 1;
+    glm::ivec2   simBounds      = {960, 600};
+    glm::uint32  brushDown      = false;
+    glm::uint32  brushType      = 0;
+    glm::vec3    brushColor     = {1, 1, 1};
+    glm::uint32  visType        = 3;
+    glm::ivec2   drawBounds     = {0, 0};
+    glm::float32 visScale       = 10;
     glm::float32 overRelaxation = 1.8;
-    glm::float32 smokeDiffuse = 10;
-    glm::float32 cellSize = 1;
-    glm::uint32  openEdges = true;
+    glm::float32 smokeDiffuse   = 10;
+    glm::float32 cellSize       = 1;
+    glm::uint32  openEdges      = true;
     glm::uint32  cellType;
-    glm::vec3    cellDetails;
+    glm::vec4    cellData;
 };
 
 struct FrameData {
@@ -38,31 +38,40 @@ struct FrameData {
 
 class FluidSimWindow : public ezWindow {
   private:
-    inline static VkExtent3D  SIM_BOUNDS {960, 600, 1};
-    inline static const char* VISUALIZATION_TYPE[]     = {"Pressure", "Velocity", "Divergence", "Smoke"};
-    inline static const int   VISUALIZATION_TYPE_COUNT = 4;
-    inline static const char* BRUSH_TYPE[]             = {"Smoke", "Pressure", "Solidity"};
-    inline static const int   BRUSH_TYPE_COUNT         = 3;
+    inline static VkExtent3D SIM_BOUNDS {960, 600, 1};
+    enum BRUSH_TYPE { BRUSH_SMOKE, BRUSH_PRESSURE, BRUSH_CELL };
+    enum CELL_TYPE { CELL_AIR, CELL_SOLID, CELL_SMOKE, CELL_VELOCITY, CELL_PRESSURE };
+    enum VISUALIZATION_TYPE {
+        VISUALIZE_PRESSURE,
+        VISUALIZE_VELOCITY,
+        VISUALIZE_DIVERGENCE,
+        VISUALIZE_SMOKE,
+    };
+
+    inline static utils::inplace_vector<const char*, 10> VISUALIZATION_TYPE_STRING = {"Pressure", "Velocity", "Divergence", "Smoke"};
+    inline static utils::inplace_vector<const char*, 10> BRUSH_TYPE_STRING         = {"Smoke", "Velocity", "Cell"};
+    inline static utils::inplace_vector<const char*, 10> CELL_TYPE_STRING          = {"Air", "Solid", "Smoke", "Velocity", "Pressure"};
 
     bool shouldUpdate = false;
-    bool updated = false;
-    bool paused = true;
-    bool shouldClear = false;
+    bool updated      = false;
+    bool paused       = true;
+    bool shouldClear  = false;
 
     Queue    computeQueue;
     Controls controls;
-    int iterations = 150;
-    bool alternateRedBlack = false;
+    int      iterations        = 150;
+    bool     alternateRedBlack = false;
 
     Image pressureMap;
     Image velocityXMap;
-    Image velocityXOldMap; 
+    Image velocityXOldMap;
     Image velocityYMap;
-    Image velocityYOldMap; 
+    Image velocityYOldMap;
     Image smokeMap;
     Image smokeOldMap;
     Image divergenceMap;
     Image solidityMap;
+    Image cellDataMap;
 
     PipeLine brushPipeline;
     PipeLine advectPipeline;
@@ -95,6 +104,7 @@ class FluidSimWindow : public ezWindow {
     void createCommandPool();
     void createCommandBuffer();
     void createSynchObjects();
+    void setImagesLayouts();
     void assignDebugNames();
 
     void blitImages(VkCommandBuffer cmd);
