@@ -37,23 +37,23 @@ struct Constants {
     uint   brushType;
     float3 brushColor;
     uint   visType;
+    int2   drawBound;
     float  visScale;
     float  overRelaxation;
     float  smokeDiffusion;
-    bool openEdges;
+    float  cellSize;
+    bool   openEdges;
+    uint   cellType;
+    float4 cellDetails;
 };
 
 [[vk::push_constant]]
 ConstantBuffer<Constants> constants;
 
-float getDivergence(int2 cord) {
-    float u_right = velocityX[int2(cord.x + 1, cord.y)];
-    float u_left  = velocityX[cord];
-    float v_down  = velocityY[int2(cord.x, cord.y + 1)];
-    float v_up    = velocityY[cord];
 
-    return (u_right - u_left) + (v_up - v_down);
-}
+//    +----------------------------------------------------+
+//    |                      samplers                      |
+//    +----------------------------------------------------+
 
 float sampleVelocityXClamped(RWTexture2D<float> image, float2 pos, float2 offset) {
     pos -= offset;
@@ -114,9 +114,9 @@ float sampleVelocityYClamped(RWTexture2D<float> image, float2 pos, float2 offset
         pos.y
     );
 }
-
-float sampleVelocityX(RWTexture2D<float> image, float2 pos, float2 offset) {
-    pos -= offset;
+float sampleVelocityX(RWTexture2D<float> image, float2 pos) {
+    pos /= constants.cellSize;
+    pos.y -= 0.5;
     
     int2 bottomLeftCoord  = int2(floor(pos));
     int2 bottomRightCoord = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y);
@@ -144,10 +144,10 @@ float sampleVelocityX(RWTexture2D<float> image, float2 pos, float2 offset) {
         pos.y
     );
 }
+float sampleVelocityY(RWTexture2D<float> image, float2 pos) {
+    pos /= constants.cellSize;
+    pos.x -= 0.5;
 
-float sampleVelocityY(RWTexture2D<float> image, float2 pos, float2 offset) {
-    pos -= offset;
-    
     int2 bottomLeftCoord  = int2(floor(pos));
     int2 bottomRightCoord = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y);
     int2 topLeftCoord     = int2(bottomLeftCoord.x, bottomLeftCoord.y + 1);
@@ -174,9 +174,9 @@ float sampleVelocityY(RWTexture2D<float> image, float2 pos, float2 offset) {
         pos.y
     );
 }
-
-float4 sampleProperty(RWTexture2D<float4> image, float2 pos, float2 offset) {
-    pos -= offset;
+float4 sampleProperty(RWTexture2D<float4> image, float2 pos) {
+    pos /= constants.cellSize;
+    pos -= float2(0.5, 0.5);
     
     int2 bottomLeftCoord  = int2(floor(pos));
     int2 bottomRightCoord = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y);
@@ -204,6 +204,96 @@ float4 sampleProperty(RWTexture2D<float4> image, float2 pos, float2 offset) {
         pos.y
     );
 }
+float sampleProperty1(RWTexture2D<float> image, float2 pos) {
+    pos /= constants.cellSize;
+    pos -= float2(0.5, 0.5);
+    
+    int2 bottomLeftCoord  = int2(floor(pos));
+    int2 bottomRightCoord = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y);
+    int2 topLeftCoord     = int2(bottomLeftCoord.x, bottomLeftCoord.y + 1);
+    int2 topRightCoord    = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y + 1);
+
+    pos = frac(pos);
+
+    float topLeftV     = ((topLeftCoord.x >= 0 && topLeftCoord.x < constants.simBounds.x) &&
+                          (topLeftCoord.y >= 0 && topLeftCoord.y < constants.simBounds.y)) ? 
+                          image[topLeftCoord] : 0.0;
+    float topRightV    = ((topRightCoord.x >= 0 && topRightCoord.x < constants.simBounds.x) &&
+                          (topRightCoord.y >= 0 && topRightCoord.y < constants.simBounds.y)) ?
+                          image[topRightCoord] : 0.0;
+    float bottomLeftV  = ((bottomLeftCoord.x >= 0 && bottomLeftCoord.x < constants.simBounds.x) &&
+                          (bottomLeftCoord.y >= 0 && bottomLeftCoord.y < constants.simBounds.y)) ?
+                          image[bottomLeftCoord] : 0.0;
+    float bottomRightV = ((bottomRightCoord.x >= 0 && bottomRightCoord.x < constants.simBounds.x) &&
+                          (bottomRightCoord.y >= 0 && bottomRightCoord.y < constants.simBounds.y)) ?
+                          image[bottomRightCoord] : 0.0;
+
+    return lerp(
+        lerp(bottomLeftV, bottomRightV, pos.x),
+        lerp(topLeftV,    topRightV,    pos.x),
+        pos.y
+    );
+}
+float sampleProperty2(RWTexture2D<uint> image, float2 pos) {
+    pos /= constants.cellSize;
+    pos -= float2(0.5, 0.5);
+    
+    int2 bottomLeftCoord  = int2(floor(pos));
+    int2 bottomRightCoord = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y);
+    int2 topLeftCoord     = int2(bottomLeftCoord.x, bottomLeftCoord.y + 1);
+    int2 topRightCoord    = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y + 1);
+
+    pos = frac(pos);
+
+    float topLeftV     = ((topLeftCoord.x >= 0 && topLeftCoord.x < constants.simBounds.x) &&
+                          (topLeftCoord.y >= 0 && topLeftCoord.y < constants.simBounds.y)) ? 
+                          image[topLeftCoord] : 0.0;
+    float topRightV    = ((topRightCoord.x >= 0 && topRightCoord.x < constants.simBounds.x) &&
+                          (topRightCoord.y >= 0 && topRightCoord.y < constants.simBounds.y)) ?
+                          image[topRightCoord] : 0.0;
+    float bottomLeftV  = ((bottomLeftCoord.x >= 0 && bottomLeftCoord.x < constants.simBounds.x) &&
+                          (bottomLeftCoord.y >= 0 && bottomLeftCoord.y < constants.simBounds.y)) ?
+                          image[bottomLeftCoord] : 0.0;
+    float bottomRightV = ((bottomRightCoord.x >= 0 && bottomRightCoord.x < constants.simBounds.x) &&
+                          (bottomRightCoord.y >= 0 && bottomRightCoord.y < constants.simBounds.y)) ?
+                          image[bottomRightCoord] : 0.0;
+
+    return lerp(
+        lerp(bottomLeftV, bottomRightV, pos.x),
+        lerp(topLeftV,    topRightV,    pos.x),
+        pos.y
+    );
+}
+float sampleNearest(RWTexture2D<uint> image, float2 pos){
+    pos /= constants.cellSize;
+    pos -= float2(0.5, 0.5);
+    
+    int2 bottomLeftCoord  = int2(floor(pos));
+    int2 bottomRightCoord = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y);
+    int2 topLeftCoord     = int2(bottomLeftCoord.x, bottomLeftCoord.y + 1);
+    int2 topRightCoord    = int2(bottomLeftCoord.x + 1, bottomLeftCoord.y + 1);
+    
+    uint topLeftV     = ((topLeftCoord.x >= 0 && topLeftCoord.x < constants.simBounds.x) &&
+                          (topLeftCoord.y >= 0 && topLeftCoord.y < constants.simBounds.y)) ? 
+                          image[topLeftCoord] : 0.0;
+    uint topRightV    = ((topRightCoord.x >= 0 && topRightCoord.x < constants.simBounds.x) &&
+                          (topRightCoord.y >= 0 && topRightCoord.y < constants.simBounds.y)) ?
+                          image[topRightCoord] : 0.0;
+    uint bottomLeftV  = ((bottomLeftCoord.x >= 0 && bottomLeftCoord.x < constants.simBounds.x) &&
+                          (bottomLeftCoord.y >= 0 && bottomLeftCoord.y < constants.simBounds.y)) ?
+                          image[bottomLeftCoord] : 0.0;
+    uint bottomRightV = ((bottomRightCoord.x >= 0 && bottomRightCoord.x < constants.simBounds.x) &&
+                          (bottomRightCoord.y >= 0 && bottomRightCoord.y < constants.simBounds.y)) ?
+                          image[bottomRightCoord] : 0.0;
+
+    pos = frac(pos);
+
+    return pos.x >= 0.5 ? (pos.y >= 0.5 ? topRightV : bottomRightV) : (pos.y >= 0.5 ? topLeftV : bottomLeftV);
+}
+
+//    +----------------------------------------------------+
+//    |                       brush                        |
+//    +----------------------------------------------------+
 
 #ifdef KERNEL_BRUSH
 [numthreads(16, 16, 1)]
@@ -270,6 +360,10 @@ void main(uint3 id : SV_DispatchThreadID) {
 }
 #endif
 
+//    +----------------------------------------------------+
+//    |                       advect                       |
+//    +----------------------------------------------------+
+
 #ifdef KERNEL_ADVECT
 [numthreads(16, 16, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
@@ -277,35 +371,39 @@ void main(uint3 id : SV_DispatchThreadID) {
     if (coord.x >= constants.simBounds.x || coord.y >= constants.simBounds.y)
         return;
 
-    float2 leftEdgePos = float2(coord.x, coord.y + 0.5);
-    float2 leftEdgeVelocity = float2(sampleVelocityX(oldVelocityX, leftEdgePos, float2(0, 0.5)), sampleVelocityY(oldVelocityY, leftEdgePos, float2(0.5, 0)));
+    float2 leftEdgePos = float2(coord.x, coord.y + 0.5) * constants.cellSize;
+    float2 leftEdgeVelocity = float2(sampleVelocityX(oldVelocityX, leftEdgePos), sampleVelocityY(oldVelocityY, leftEdgePos));
     float2 leftEdgePrevPos = leftEdgePos - constants.deltaTime * leftEdgeVelocity;
-    velocityX[coord] = sampleVelocityX(oldVelocityX, leftEdgePrevPos, float2(0, 0.5));
+    velocityX[coord] = sampleVelocityX(oldVelocityX, leftEdgePrevPos);
 
-    float2 bottomEdgePos = float2(coord.x + 0.5, coord.y);
-    float2 bottomEdgeVelocity = float2(sampleVelocityX(oldVelocityX, bottomEdgePos, float2(0, 0.5)), sampleVelocityY(oldVelocityY, bottomEdgePos, float2(0.5, 0)));
+    float2 bottomEdgePos = float2(coord.x + 0.5, coord.y) * constants.cellSize;
+    float2 bottomEdgeVelocity = float2(sampleVelocityX(oldVelocityX, bottomEdgePos), sampleVelocityY(oldVelocityY, bottomEdgePos));
     float2 bottomEdgePrevPos = bottomEdgePos - constants.deltaTime * bottomEdgeVelocity;
-    velocityY[coord] = sampleVelocityY(oldVelocityY, bottomEdgePrevPos, float2(0.5, 0));
+    velocityY[coord] = sampleVelocityY(oldVelocityY, bottomEdgePrevPos);
 
     if(coord.x == constants.simBounds.x - 1) {
-        float2 rightEdgePos = float2(coord.x + 1, coord.y + 0.5);
-        float2 rightEdgeVelocity = float2(sampleVelocityX(oldVelocityX, rightEdgePos, float2(0, 0.5)), sampleVelocityY(oldVelocityY, rightEdgePos, float2(0.5, 0)));
+        float2 rightEdgePos = float2(coord.x + 1, coord.y + 0.5) * constants.cellSize;
+        float2 rightEdgeVelocity = float2(sampleVelocityX(oldVelocityX, rightEdgePos), sampleVelocityY(oldVelocityY, rightEdgePos));
         float2 rightEdgePrevPos = rightEdgePos - constants.deltaTime * rightEdgeVelocity;
-        velocityX[int2(coord.x + 1, coord.y)] = sampleVelocityX(oldVelocityX, rightEdgePrevPos, float2(0, 0.5));
+        velocityX[int2(coord.x + 1, coord.y)] = sampleVelocityX(oldVelocityX, rightEdgePrevPos);
     }
     if(coord.y == constants.simBounds.y - 1) {
-        float2 topEdgePos = float2(coord.x + 0.5, coord.y + 1);
-        float2 topEdgeVelocity = float2(sampleVelocityX(oldVelocityX, topEdgePos, float2(0, 0.5)), sampleVelocityY(oldVelocityY, topEdgePos, float2(0.5, 0)));
+        float2 topEdgePos = float2(coord.x + 0.5, coord.y + 1) * constants.cellSize;
+        float2 topEdgeVelocity = float2(sampleVelocityX(oldVelocityX, topEdgePos), sampleVelocityY(oldVelocityY, topEdgePos));
         float2 topEdgePrevPos = topEdgePos - constants.deltaTime * topEdgeVelocity;
-        velocityY[int2(coord.x, coord.y + 1)] = sampleVelocityY(oldVelocityY, topEdgePrevPos, float2(0.5, 0));
+        velocityY[int2(coord.x, coord.y + 1)] = sampleVelocityY(oldVelocityY, topEdgePrevPos);
     }
 
-    float2 centerPos = float2(coord.x + 0.5, coord.y + 0.5);
-    float2 centerVelocity = float2(sampleVelocityX(oldVelocityX, centerPos, float2(0, 0.5)), sampleVelocityY(oldVelocityY, centerPos, float2(0.5, 0)));
+    float2 centerPos = float2(coord.x + 0.5, coord.y + 0.5) * constants.cellSize;
+    float2 centerVelocity = float2(sampleVelocityX(oldVelocityX, centerPos), sampleVelocityY(oldVelocityY, centerPos));
     float2 centerPrevPos = centerPos - constants.deltaTime * centerVelocity;
-    smoke[coord] = sampleProperty(oldSmoke, centerPrevPos, float2(0.5, 0.5));
+    smoke[coord] = sampleProperty(oldSmoke, centerPrevPos);
 }
 #endif
+
+//    +----------------------------------------------------+
+//    |                       diffuse                      |
+//    +----------------------------------------------------+
 
 #ifdef KERNEL_DIFFUSE
 [numthreads(16, 16, 1)]
@@ -327,9 +425,16 @@ void main(uint3 id : SV_DispatchThreadID) {
     float4 smokeRight = rightExist ? oldSmoke[int2(coord.x + 1, coord.y)] : outsideSmoke;
     float4 smokeLeft = leftExist ? oldSmoke[int2(coord.x - 1, coord.y)] : outsideSmoke;
 
-    smoke[coord] = smokeCenter + constants.deltaTime * (smokeUp + smokeDown + smokeRight + smokeLeft - 4 * smokeCenter) * constants.smokeDiffusion;
+    smoke[coord] = smokeCenter + 
+        (constants.deltaTime * constants.smokeDiffusion) * 
+        (smokeUp + smokeDown + smokeRight + smokeLeft - 4 * smokeCenter)
+        / (constants.cellSize * constants.cellSize);
 }
 #endif
+
+//    +----------------------------------------------------+
+//    |                     pre process                    |
+//    +----------------------------------------------------+
 
 #ifdef KERNEL_PRE_PROCESS
 [numthreads(16, 16, 1)]
@@ -355,7 +460,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     float uUp     = !upSolid    ? velocityY[coord + int2(0, 1)]    : 0.0;
     float uDown   = !downSolid  ? velocityY[coord]                 : 0.0;
 
-    uint d = asuint(-constants.density / constants.deltaTime * (uRight - uLeft + uUp - uDown)) & 0xFFFFFFE0;
+    uint d = asuint(-constants.density * constants.cellSize / constants.deltaTime * (uRight - uLeft + uUp - uDown)) & 0xFFFFFFE0;
     d |= int(centerSolid);
     d |= int(leftSolid) << 1;
     d |= int(rightSolid) << 2;
@@ -365,6 +470,10 @@ void main(uint3 id : SV_DispatchThreadID) {
     divergence[coord] = asfloat(d);
 }
 #endif
+
+//    +----------------------------------------------------+
+//    |                      project                       |
+//    +----------------------------------------------------+
 
 #ifdef KERNEL_PROJECT
 [numthreads(16, 16, 1)]
@@ -380,6 +489,8 @@ void main(uint3 id : SV_DispatchThreadID) {
     bool rightSolid = bool(raw & 4);
     bool downSolid  = bool(raw & 8);
     bool upSolid    = bool(raw & 16);
+
+    if(raw & 1) return;
     
     int neighboursNum = int(!leftSolid) + int(!rightSolid) + int(!downSolid) + int(!upSolid);
     if(neighboursNum == 0) return;
@@ -403,6 +514,10 @@ void main(uint3 id : SV_DispatchThreadID) {
 }
 #endif
 
+//    +----------------------------------------------------+
+//    |                  update velocities                 |
+//    +----------------------------------------------------+
+
 #ifdef KERNEL_UPDATE_VELOCITIES
 [numthreads(16, 16, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
@@ -412,6 +527,8 @@ void main(uint3 id : SV_DispatchThreadID) {
 
     bool centerSolid = solidity[coord] != 0;
 
+    float alpha = constants.deltaTime / (constants.density * constants.cellSize);
+
     float pCenter = pressure[coord];
     float pOutside = constants.openEdges ? -pCenter : pCenter; 
 
@@ -419,14 +536,14 @@ void main(uint3 id : SV_DispatchThreadID) {
     bool downSolid   = downExist ? solidity[coord + int2(0, -1)] : !constants.openEdges;
     float pDown      = downExist ? pressure[int2(coord.x, coord.y - 1)] : pOutside;
     float uDown      = velocityY[coord];
-    float uDownNew   = (!downSolid && !centerSolid) ? uDown - (constants.deltaTime / constants.density) * (pCenter - pDown) : 0.0;
+    float uDownNew   = (!downSolid && !centerSolid) ? uDown - alpha * (pCenter - pDown) : 0.0;
     velocityY[coord] = uDownNew;
 
     bool leftExist   = (coord.x != 0);
     bool leftSolid   = leftExist ? solidity[coord + int2(-1, 0)] : !constants.openEdges;
     float pLeft      = leftExist ? pressure[int2(coord.x - 1, coord.y)] : pOutside;
     float uLeft      = velocityX[coord];
-    float uLeftNew   = (!leftSolid && !centerSolid) ? uLeft - (constants.deltaTime / constants.density) * (pCenter - pLeft) : 0;
+    float uLeftNew   = (!leftSolid && !centerSolid) ? uLeft - alpha * (pCenter - pLeft) : 0;
     velocityX[coord] = uLeftNew;
 
     if(coord.x == constants.simBounds.x - 1) {
@@ -434,7 +551,7 @@ void main(uint3 id : SV_DispatchThreadID) {
         bool rightSolid = rightExist ? solidity[coord + int2(1, 0)]  : !constants.openEdges;
         float pRight    = rightExist ? pressure[int2(coord.x + 1, coord.y)] : pOutside;
         float uRight    = velocityX[coord + int2(1, 0)];
-        float uRightNew = (!rightSolid && !centerSolid) ? uRight - (constants.deltaTime / constants.density) * (pRight - pCenter) : 0;
+        float uRightNew = (!rightSolid && !centerSolid) ? uRight - alpha * (pRight - pCenter) : 0;
         velocityX[int2(coord.x + 1, coord.y)] = uRightNew;
     }
     if(coord.y == constants.simBounds.y - 1) {
@@ -442,12 +559,15 @@ void main(uint3 id : SV_DispatchThreadID) {
         bool upSolid = upExist    ? solidity[coord + int2(0, 1)]  : !constants.openEdges;
         float pUp    = upExist ? pressure[int2(coord.x, coord.y + 1)] : pOutside;
         float uUp    = velocityY[coord + int2(0, 1)];
-        float uUpNew = (!upSolid && !centerSolid) ? uUp - (constants.deltaTime / constants.density) * (pUp - pCenter) : 0.0;
+        float uUpNew = (!upSolid && !centerSolid) ? uUp - alpha * (pUp - pCenter) : 0.0;
         velocityY[int2(coord.x, coord.y + 1)] = uUpNew;
     }
 }
 #endif
 
+//    +----------------------------------------------------+
+//    |                   visualization                    |
+//    +----------------------------------------------------+
 
 float3 hsvToRgb(float h, float s, float v) {
     float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
@@ -482,26 +602,29 @@ float3 jetColormap(float x) {
         1.5 - abs(4.0 * x - 1.0)
     ));
 }
+
 #ifdef KERNEL_VISUALIZE
 [numthreads(16, 16, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
     int2 coord = int2(id.xy);
-    if (coord.x >= constants.simBounds.x || coord.y >= constants.simBounds.y)
+    if (coord.x >= constants.drawBound.x || coord.y >= constants.drawBound.y)
         return;
+
+    float2 pos = (coord + float2(0.5, 0.5));
 
     float4 outColor = float4(0.0, 0.0, 0.0, 1.0);
 
     switch (constants.visType) {
         case VISUALIZE_PRESSURE:
         {
-            float p = pressure[coord] / constants.visScale;
+            float p = sampleProperty1(pressure, pos) / constants.visScale;
             outColor = (p >= 0.0) ? float4(p, 0.0, 0.0, 1.0) : float4(0.0, 0.0, -p, 1.0);
             break;
         }
         case VISUALIZE_VELOCITY:
         {
-            float u = 0.5 * (velocityX[coord + int2(1, 0)] + velocityX[coord]);
-            float v = 0.5 * (velocityY[coord + int2(0, 1)] + velocityY[coord]);
+            float u = sampleVelocityX(velocityX, pos);
+            float v = sampleVelocityY(velocityY, pos);
 
             float speed = length(float2(u, v));
             float t = speed / max(constants.visScale, 0.0001);
@@ -513,10 +636,10 @@ void main(uint3 id : SV_DispatchThreadID) {
         }
         case VISUALIZE_DIVERGENCE:
         {
-            float uLeft  = velocityX[coord];
-            float uRight = velocityX[coord + int2(1, 0)];
-            float uDown  = velocityY[coord];
-            float uUp    = velocityY[coord + int2(0, 1)];
+            float uLeft  = sampleVelocityX(velocityX, pos);
+            float uRight = sampleVelocityX(velocityX, pos + float2(constants.cellSize, 0.0));
+            float uDown  = sampleVelocityY(velocityY, pos);
+            float uUp    = sampleVelocityY(velocityY, pos + float2(0.0, constants.cellSize));
 
             float div = (uRight - uLeft) + (uUp - uDown);
             float d = div / max(constants.visScale, 0.0001f);
@@ -525,15 +648,16 @@ void main(uint3 id : SV_DispatchThreadID) {
         }
         case VISUALIZE_SMOKE:
         {
-            outColor = float4(smoke[coord].xyz, 0.0);
+            outColor = float4(sampleProperty(smoke, pos).xyz, 0.0);
             break;
         }
     }
 
-    if(solidity[coord] == 1) {
-        outColor = float4(1.0, 1.0, 1.0, 1.0);
+    float cellType = sampleProperty2(solidity, pos);
+    if(cellType >= 0.001) {
+        outColor = float4(cellType, cellType, cellType, 1.0);
     }
 
-    drawImage[int2(coord.x, constants.simBounds.y - 1 - coord.y)] = outColor;
+    drawImage[int2(coord.x, constants.drawBound.y - 1 - coord.y)] = outColor;
 }
 #endif

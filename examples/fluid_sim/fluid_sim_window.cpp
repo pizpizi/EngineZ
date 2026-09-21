@@ -8,6 +8,7 @@
 #include "enginez/utils/utilities.hpp"
 #include "imgui.h"
 #include "vulkan/vulkan_core.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -75,6 +76,10 @@ void FluidSimWindow::draw(Image& drawImage) {
 
     // --------------------- dispatches --------------------- //
 
+    controls.drawBounds.x = swapchainExtent.width;
+    controls.drawBounds.y = swapchainExtent.height;
+    controls.cellSize = std::min(float(swapchainExtent.width) / controls.simBounds.x, float(swapchainExtent.height) / controls.simBounds.y);
+
     blitImages(cmd);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, brushPipeline.layout.handle, 0, 1, &computeDS, 0, nullptr);
     vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
@@ -135,7 +140,7 @@ void FluidSimWindow::draw(Image& drawImage) {
     }
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, visualizePipeline.handle);
     vkCmdPipelineBarrier2(cmd, &depInfo);
-    vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
+    vkCmdDispatch(cmd, std::ceil(drawImage.extent.width / 16.f), std::ceil(drawImage.extent.height / 16.f), 1);
 
     if (shouldUpdate && !updated) updated = true;
 
@@ -246,6 +251,8 @@ void FluidSimWindow::draw(Image& drawImage) {
     ImGui::InputFloat("Smoke diffusion", &controls.smokeDiffuse);
     ImGui::Checkbox("Open edges", (bool*)&controls.openEdges);
     ImGui::Checkbox("Alternate red-black", &alternateRedBlack);
+    ImGui::InputFloat("Cell size", &controls.cellSize);
+    ImGui::ShowDemoWindow();
     if (ImGui::Button("clear")) {
         shouldClear = true;
     }
@@ -253,11 +260,13 @@ void FluidSimWindow::draw(Image& drawImage) {
 }
 
 void FluidSimWindow::onMouseMoved(double xpos, double ypos) {
-    controls.brushDelta.x = xpos - controls.brushPos.x;
-    controls.brushDelta.y = SIM_BOUNDS.height - ypos - controls.brushPos.y;
+    controls.brushDelta.x = (xpos) / controls.cellSize - controls.brushPos.x;
+    controls.brushDelta.y = (swapchainExtent.height - ypos) / controls.cellSize - controls.brushPos.y;
 
     controls.brushPos.x = xpos;
-    controls.brushPos.y = SIM_BOUNDS.height - ypos;
+    controls.brushPos.y = (swapchainExtent.height - ypos);
+
+    controls.brushPos /= controls.cellSize;
 };
 void FluidSimWindow::onMouseDown(int button, int action, int mods) {
     ImGuiIO& io = ImGui::GetIO();
