@@ -37,10 +37,6 @@ namespace enginez::graphics {
 //    |                       PUBLIC                       |
 //    +----------------------------------------------------+
       public:
-        // ----------- static vars ---------- //
-        static inline const int        FRAMES_IN_FLY     = 1;
-        static inline const VkExtent3D DRAW_IMAGE_EXTENT = {1920, 1200, 1};
-        // ---------------------------------- //
 
         ezWindow(ezWindowCreateInfo& createInfo);
         void cleanUp();
@@ -50,6 +46,11 @@ namespace enginez::graphics {
 //    |                       PRIVATE                      |
 //    +----------------------------------------------------+
       private:
+        // ----------- static vars ---------- //
+        static inline const int        FRAMES_IN_FLY     = 1;
+        static inline const VkExtent3D DRAW_IMAGE_EXTENT = {1920, 1200, 1};
+        // ---------------------------------- //
+        
         // -------------- init -------------- //
         void init(ezVulkanBackend* backend);
         void setupLogger();

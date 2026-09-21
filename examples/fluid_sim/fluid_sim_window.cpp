@@ -16,14 +16,14 @@
 using namespace std;
 
 void FluidSimWindow::draw(Image& drawImage) {
-    auto cmd         = computeCommandBuffer.handle;
+    auto cmd         = computeCommandBuffer[currentFrame].handle;
     auto graphicsCmd = graphicsCommandBuffer.handle;
 
-    vkWaitForFences(device.handle, 1, &computeFence, VK_TRUE, 1000000000);
-    vkResetFences(device.handle, 1, &computeFence);
+    vkWaitForFences(device.handle, 1, &computeFence[currentFrame], VK_TRUE, 1000000000);
+    vkResetFences(device.handle, 1, &computeFence[currentFrame]);
 
     // ------------ compute command buffer begin ------------ //
-    static VkCommandBufferBeginInfo computeCommandBufferBeginInfo {
+    VkCommandBufferBeginInfo computeCommandBufferBeginInfo {
         .sType            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .pNext            = nullptr,
         .flags            = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
@@ -33,13 +33,13 @@ void FluidSimWindow::draw(Image& drawImage) {
     vkBeginCommandBuffer(cmd, &computeCommandBufferBeginInfo);
 
     // ---------------- descriptor set update --------------- //
-    static VkDescriptorImageInfo imageInfo[1] = {VkDescriptorImageInfo {
+    VkDescriptorImageInfo imageInfo[1] = {VkDescriptorImageInfo {
         .sampler     = nullptr,
         .imageView   = drawImage.view,
         .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
     }};
 
-    static VkWriteDescriptorSet write[3] = {
+    VkWriteDescriptorSet write[3] = {
         VkWriteDescriptorSet {
             .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstSet          = computeDS,
@@ -78,7 +78,7 @@ void FluidSimWindow::draw(Image& drawImage) {
 
     controls.drawBounds.x = swapchainExtent.width;
     controls.drawBounds.y = swapchainExtent.height;
-    controls.cellSize = std::min(float(swapchainExtent.width) / controls.simBounds.x, float(swapchainExtent.height) / controls.simBounds.y);
+    controls.cellSize     = std::min(float(swapchainExtent.width) / controls.simBounds.x, float(swapchainExtent.height) / controls.simBounds.y);
 
     blitImages(cmd);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, brushPipeline.layout.handle, 0, 1, &computeDS, 0, nullptr);
@@ -121,13 +121,13 @@ void FluidSimWindow::draw(Image& drawImage) {
         vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
 
         for (int i = 0; i < iterations; i++) {
-            controls.redBlackIdx = alternateRedBlack ? i & 1 : 1;
+            controls.redBlackIdx = 0;
             vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, projectPipeline.handle);
             vkCmdPipelineBarrier2(cmd, &depInfo);
             vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 32.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
 
-            controls.redBlackIdx = alternateRedBlack ? (i + 1) & 1 : 0;
+            controls.redBlackIdx = 1;
             vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, projectPipeline.handle);
             vkCmdPipelineBarrier2(cmd, &depInfo);
@@ -152,21 +152,21 @@ void FluidSimWindow::draw(Image& drawImage) {
     vkEndCommandBuffer(cmd);
 
     // -------------- submit to compute queueu -------------- //
-    static VkCommandBufferSubmitInfo computeBufferSubmitInfo {
+    VkCommandBufferSubmitInfo computeBufferSubmitInfo {
         .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
         .pNext         = nullptr,
         .commandBuffer = cmd,
         .deviceMask    = 0,
     };
-    static VkSemaphoreSubmitInfo computeSemaphoreSubmitInfo {
+    VkSemaphoreSubmitInfo computeSemaphoreSubmitInfo {
         .sType       = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
         .pNext       = nullptr,
-        .semaphore   = computeSemaphore,
+        .semaphore   = computeSemaphore[currentFrame],
         .value       = 1,
         .stageMask   = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
         .deviceIndex = 0,
     };
-    static VkSubmitInfo2 computeSubmitInfo {
+    VkSubmitInfo2 computeSubmitInfo {
         .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
         .pNext                    = nullptr,
         .flags                    = 0,
@@ -177,10 +177,10 @@ void FluidSimWindow::draw(Image& drawImage) {
         .signalSemaphoreInfoCount = 1,
         .pSignalSemaphoreInfos    = &computeSemaphoreSubmitInfo,
     };
-    vkQueueSubmit2(computeQueue.handle, 1, &computeSubmitInfo, computeFence);
+    vkQueueSubmit2(computeQueue.handle, 1, &computeSubmitInfo, computeFence[currentFrame]);
 
     // ------------ graphics command buffer begin ----------- //
-    static VkCommandBufferBeginInfo graphicsCommandBufferBeginInfo {
+    VkCommandBufferBeginInfo graphicsCommandBufferBeginInfo {
         .sType            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .pNext            = nullptr,
         .flags            = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
@@ -191,21 +191,21 @@ void FluidSimWindow::draw(Image& drawImage) {
     vkEndCommandBuffer(graphicsCmd);
 
     // -------------- submit to graphics queue -------------- //
-    static VkCommandBufferSubmitInfo graphicsBufferSubmitInfo {
+    VkCommandBufferSubmitInfo graphicsBufferSubmitInfo {
         .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
         .pNext         = nullptr,
         .commandBuffer = graphicsCmd,
         .deviceMask    = 0,
     };
-    static VkSemaphoreSubmitInfo graphicsSemaphoreSubmitInfo {
+    VkSemaphoreSubmitInfo graphicsSemaphoreSubmitInfo {
         .sType       = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
         .pNext       = nullptr,
-        .semaphore   = computeSemaphore,
+        .semaphore   = computeSemaphore[currentFrame],
         .value       = 1,
         .stageMask   = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
         .deviceIndex = 0,
     };
-    static VkSubmitInfo2 graphicsSubmitInfo {
+    VkSubmitInfo2 graphicsSubmitInfo {
         .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
         .pNext                    = nullptr,
         .flags                    = 0,
@@ -218,6 +218,8 @@ void FluidSimWindow::draw(Image& drawImage) {
     };
 
     vkQueueSubmit2(graphicsQueue.handle, 1, &graphicsSubmitInfo, nullptr);
+
+    // ------------------------- ui ------------------------- //
 
     ImGui::Begin("Visualization");
     ImGui::SliderFloat("Visualization scale", &controls.visScale, 0.001f, 1000.f);
@@ -241,9 +243,9 @@ void FluidSimWindow::draw(Image& drawImage) {
         }
         ImGui::EndCombo();
     }
-    if(controls.brushType == BRUSH_SMOKE) {
+    if (controls.brushType == BRUSH_SMOKE) {
         ImGui::ColorPicker3("Smoke color", (float*)&controls.cellData);
-    } else if(controls.brushType == BRUSH_CELL) {
+    } else if (controls.brushType == BRUSH_CELL) {
         if (ImGui::BeginCombo("Type", CELL_TYPE_STRING[controls.cellType])) {
             for (auto i = 0; i < CELL_TYPE_STRING.size(); i++) {
                 if (ImGui::Selectable(CELL_TYPE_STRING[i])) {
@@ -253,13 +255,11 @@ void FluidSimWindow::draw(Image& drawImage) {
             ImGui::EndCombo();
         }
 
-        if(controls.cellType == CELL_PRESSURE) {
+        if (controls.cellType == CELL_PRESSURE) {
             ImGui::InputFloat("Pressure", &controls.cellData[0]);
-        } else if(controls.cellType == CELL_VELOCITY) {
-            ImGui::InputFloat("Speed top", &controls.cellData[0]);
-            ImGui::InputFloat("Speed right", &controls.cellData[1]);
-            ImGui::InputFloat("Speed bottom", &controls.cellData[2]);
-            ImGui::InputFloat("Speed left", &controls.cellData[3]);
+        } else if (controls.cellType == CELL_VELOCITY) {
+            ImGui::InputFloat("Horizontal Speed", &controls.cellData[0]);
+            ImGui::InputFloat("Vertical Speed", &controls.cellData[1]);
         } else if (controls.cellType == CELL_SMOKE) {
             ImGui::ColorPicker3("Smoke color", (float*)&controls.cellData);
         }
@@ -277,14 +277,13 @@ void FluidSimWindow::draw(Image& drawImage) {
     ImGui::InputFloat("Over relaxation", &controls.overRelaxation);
     ImGui::InputFloat("Smoke diffusion", &controls.smokeDiffuse);
     ImGui::Checkbox("Open edges", (bool*)&controls.openEdges);
-    ImGui::Checkbox("Alternate red-black", &alternateRedBlack);
-    ImGui::InputFloat("Cell size", &controls.cellSize);
     if (ImGui::Button("clear")) {
         shouldClear = true;
     }
     ImGui::End();
-}
 
+    currentFrame = (currentFrame + 1) % FRAMES_IN_FLY;
+}
 
 void FluidSimWindow::onMouseMoved(double xpos, double ypos) {
     controls.brushDelta.x = (xpos) / controls.cellSize - controls.brushPos.x;
@@ -875,7 +874,7 @@ void FluidSimWindow::setImagesLayouts() {
             .subresourceRange = ezVulkanBackend::SUBRESOURCE_WHOLE,
         }
     };
-    VkDependencyInfo      depInfo {
+    VkDependencyInfo depInfo {
         .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .imageMemoryBarrierCount = 10,
         .pImageMemoryBarriers    = barriers,
@@ -886,16 +885,16 @@ void FluidSimWindow::setImagesLayouts() {
         .flags            = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
         .pInheritanceInfo = nullptr,
     };
-    vkBeginCommandBuffer(computeCommandBuffer.handle, &computeCommandBufferBeginInfo);
-    vkCmdPipelineBarrier2(computeCommandBuffer.handle, &depInfo);
+    vkBeginCommandBuffer(computeCommandBuffer[0].handle, &computeCommandBufferBeginInfo);
+    vkCmdPipelineBarrier2(computeCommandBuffer[0].handle, &depInfo);
 
-    vkEndCommandBuffer(computeCommandBuffer.handle);
+    vkEndCommandBuffer(computeCommandBuffer[0].handle);
 
     // -------------- submit to compute queueu -------------- //
     static VkCommandBufferSubmitInfo computeBufferSubmitInfo {
         .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
         .pNext         = nullptr,
-        .commandBuffer = computeCommandBuffer.handle,
+        .commandBuffer = computeCommandBuffer[0].handle,
         .deviceMask    = 0,
     };
     static VkSubmitInfo2 computeSubmitInfo {
@@ -918,12 +917,16 @@ void FluidSimWindow::createCommandPool() {
     graphicsCommandBufferPool = backend.createCommandPool(graphicsQueue).value();
 }
 void FluidSimWindow::createCommandBuffer() {
-    computeCommandBuffer  = backend.allocateCommandBuffer(computeCommandBufferPool).value();
+    for (auto i = 0; i < FRAMES_IN_FLY; i++) {
+        computeCommandBuffer[i] = backend.allocateCommandBuffer(computeCommandBufferPool).value();
+    }
     graphicsCommandBuffer = backend.allocateCommandBuffer(graphicsCommandBufferPool).value();
 }
 void FluidSimWindow::createSynchObjects() {
-    computeFence     = backend.createFence().value();
-    computeSemaphore = backend.createSemaphore().value();
+    for (auto i = 0; i < FRAMES_IN_FLY; i++) {
+        computeFence[i]     = backend.createFence().value();
+        computeSemaphore[i] = backend.createSemaphore().value();
+    }
 }
 void FluidSimWindow::assignDebugNames() {
     setDebugName(device.handle, computeQueue.handle, VK_OBJECT_TYPE_QUEUE, "queue_compute");
@@ -945,10 +948,12 @@ void FluidSimWindow::assignDebugNames() {
     setDebugName(device.handle, visualizePipeline.handle, VK_OBJECT_TYPE_PIPELINE, "visualizePipeline");
 
     // setDebugName(device.handle, renderSemaphore, VK_OBJECT_TYPE_SEMAPHORE, "sem_render");
-    setDebugName(device.handle, computeSemaphore, VK_OBJECT_TYPE_SEMAPHORE, "sem_compute");
+    // setDebugName(device.handle, computeSemaphore, VK_OBJECT_TYPE_SEMAPHORE, "sem_compute");
 
-    setDebugName(device.handle, computeFence, VK_OBJECT_TYPE_FENCE, "fen_compute");
+    // setDebugName(device.handle, computeFence, VK_OBJECT_TYPE_FENCE, "fen_compute");
 
-    setDebugName(device.handle, computeCommandBuffer.handle, VK_OBJECT_TYPE_COMMAND_BUFFER, "computeBuffer");
+    for (auto i = 0; i < FRAMES_IN_FLY; i++) {
+        setDebugName(device.handle, computeCommandBuffer[i].handle, VK_OBJECT_TYPE_COMMAND_BUFFER, "computeBuffer_{}", i);
+    }
     setDebugName(device.handle, graphicsCommandBuffer.handle, VK_OBJECT_TYPE_COMMAND_BUFFER, "graphicsBuffer");
 }

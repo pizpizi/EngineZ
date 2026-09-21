@@ -29,7 +29,7 @@ def compile_hlsl(src: Path, out_spv: Path, kernel_def: str = None):
         "-T", "cs_6_0",
         "-E", "main",
         "-Zi",
-        # "-fspv-debug=vulkan-with-source",
+        "-fspv-debug=vulkan-with-source",
         "-O3",
         str(src.absolute())
     ]

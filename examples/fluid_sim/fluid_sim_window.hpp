@@ -17,7 +17,7 @@ struct Controls {
     glm::vec2    brushDelta     = {0, 0};
     glm::int32   redBlackIdx    = 0;
     glm::float32 brushSize      = 1;
-    glm::ivec2   simBounds      = {960, 600};
+    glm::ivec2   simBounds      = {640, 400};
     glm::uint32  brushDown      = false;
     glm::uint32  brushType      = 0;
     glm::vec3    brushColor     = {1, 1, 1};
@@ -38,7 +38,8 @@ struct FrameData {
 
 class FluidSimWindow : public ezWindow {
   private:
-    inline static VkExtent3D SIM_BOUNDS {960, 600, 1};
+    inline static VkExtent3D SIM_BOUNDS {640, 400, 1};
+    inline static const int FRAMES_IN_FLY = 1;
     enum BRUSH_TYPE { BRUSH_SMOKE, BRUSH_PRESSURE, BRUSH_CELL };
     enum CELL_TYPE { CELL_AIR, CELL_SOLID, CELL_SMOKE, CELL_VELOCITY, CELL_PRESSURE };
     enum VISUALIZATION_TYPE {
@@ -54,13 +55,13 @@ class FluidSimWindow : public ezWindow {
 
     bool shouldUpdate = false;
     bool updated      = false;
-    bool paused       = true;
+    bool paused       = false;
     bool shouldClear  = false;
 
     Queue    computeQueue;
     Controls controls;
-    int      iterations        = 150;
-    bool     alternateRedBlack = false;
+    int      iterations = 150;
+    int currentFrame = 0;
 
     Image pressureMap;
     Image velocityXMap;
@@ -85,13 +86,13 @@ class FluidSimWindow : public ezWindow {
     DescriptorPool      descriptorPool;
     DescriptorSet       computeDS;
 
-    CommandBuffer computeCommandBuffer;
+    CommandBuffer computeCommandBuffer[FRAMES_IN_FLY];
     CommandBuffer graphicsCommandBuffer;
     CommandPool   computeCommandBufferPool;
     CommandPool   graphicsCommandBufferPool;
 
-    Fence     computeFence;
-    Semaphore computeSemaphore;
+    Fence     computeFence[FRAMES_IN_FLY];
+    Semaphore computeSemaphore[FRAMES_IN_FLY];
 
     void onOpen() override;
     void draw(Image& drawImage) override;
