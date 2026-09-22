@@ -389,7 +389,7 @@ VkSurfaceFormatKHR ezWindow::getSuitableFormat(vector<VkSurfaceFormatKHR>& forma
 }
 
 VkPresentModeKHR ezWindow::choosePresentMode(std::vector<VkPresentModeKHR>& modes) {
-    return VK_PRESENT_MODE_IMMEDIATE_KHR;
+    return VK_PRESENT_MODE_FIFO_KHR;
 }
 
 VkExtent2D ezWindow::chooseSwapExtent(VkSurfaceCapabilitiesKHR& surfaceCapabilities) {
@@ -414,6 +414,7 @@ VkExtent2D ezWindow::chooseSwapExtent(VkSurfaceCapabilitiesKHR& surfaceCapabilit
 //    +----------------------------------------------------+
 
 void ezWindow::internalUpdate() {
+
     if (glfwWindowShouldClose(glfwWindow)) {
         closed = true;
         logger.debug(std::format("window {} marked as closed", title));
@@ -448,7 +449,9 @@ void ezWindow::internalUpdate() {
 
     // --------------------- main update -------------------- //
     
-    draw(drawImage);
+    currentFrameTime = chrono::high_resolution_clock::now();
+    draw(drawImage, (currentFrameTime - prevFrameTime).count());
+    prevFrameTime = currentFrameTime;
 
     ImGui::Render();
     ImDrawData* draw_data = ImGui::GetDrawData();
@@ -605,5 +608,6 @@ void ezWindow::internalUpdate() {
     result = vkQueuePresentKHR(graphicsQueue.handle, &presentInfo);
 
     currentFrame++;
+    
 }
 

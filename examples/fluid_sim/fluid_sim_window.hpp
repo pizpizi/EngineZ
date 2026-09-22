@@ -95,7 +95,7 @@ class FluidSimWindow : public ezWindow {
     Semaphore computeSemaphore[FRAMES_IN_FLY];
 
     void onOpen() override;
-    void draw(Image& drawImage) override;
+    void draw(Image& drawImage, uint64_t deltaTime) override;
     void onClose() override;
 
     void createImages();
@@ -115,7 +115,6 @@ class FluidSimWindow : public ezWindow {
 
     void onMouseMoved(double xpos, double ypos) override;
     void onMouseDown(int button, int action, int mods) override;
-
   public:
     FluidSimWindow(ezWindowCreateInfo createInfo, Queue& computeQueue) : ezWindow(createInfo), computeQueue(computeQueue) {};
 };

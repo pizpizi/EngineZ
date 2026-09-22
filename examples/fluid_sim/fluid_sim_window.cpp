@@ -7,15 +7,17 @@
 #include "enginez/graphics/ez_vulkan_backend.hpp"
 #include "enginez/utils/utilities.hpp"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "vulkan/vulkan_core.h"
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
 using namespace std;
 
-void FluidSimWindow::draw(Image& drawImage) {
+void FluidSimWindow::draw(Image& drawImage, uint64_t deltaTime) {
     auto cmd         = computeCommandBuffer[currentFrame].handle;
     auto graphicsCmd = graphicsCommandBuffer.handle;
 
@@ -120,16 +122,15 @@ void FluidSimWindow::draw(Image& drawImage) {
         vkCmdPipelineBarrier2(cmd, &depInfo);
         vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 16.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
 
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, projectPipeline.handle);
         for (int i = 0; i < iterations; i++) {
             controls.redBlackIdx = 0;
             vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, projectPipeline.handle);
             vkCmdPipelineBarrier2(cmd, &depInfo);
             vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 32.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
 
             controls.redBlackIdx = 1;
             vkCmdPushConstants(cmd, brushPipeline.layout.handle, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Controls), &controls);
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, projectPipeline.handle);
             vkCmdPipelineBarrier2(cmd, &depInfo);
             vkCmdDispatch(cmd, std::ceil(SIM_BOUNDS.width / 32.f), std::ceil(SIM_BOUNDS.height / 16.f), 1);
         }
@@ -280,6 +281,13 @@ void FluidSimWindow::draw(Image& drawImage) {
     if (ImGui::Button("clear")) {
         shouldClear = true;
     }
+    ImGui::End();
+
+    ImGui::SetNextWindowPos({10, 10});
+    // ImGui::SetNextWindowSize({200, 20});
+    ImGui::Begin("Details", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::Text("Frame Time: %.6fs", deltaTime / 1.0e9);
+    ImGui::Text("Frame Rate: %d", (int)(1.0e9 / deltaTime));
     ImGui::End();
 
     currentFrame = (currentFrame + 1) % FRAMES_IN_FLY;

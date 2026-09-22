@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <vector>
 #define GLFW_INCLUDE_VULKAN
@@ -92,6 +93,8 @@ namespace enginez::graphics {
 
         bool closed       = false;
         bool shouldResize = false;
+        std::chrono::time_point<std::chrono::high_resolution_clock> currentFrameTime;
+        std::chrono::time_point<std::chrono::high_resolution_clock> prevFrameTime;
 
         VkSurfaceCapabilitiesKHR surfaceCapabilities;
 //    +----------------------------------------------------+
@@ -101,7 +104,7 @@ namespace enginez::graphics {
         // ------------ callbacks ----------- //
         virtual void onMouseMoved(double xpos, double ypos) {};
         virtual void onMouseDown(int button, int action, int mods) {};
-        virtual void draw(Image& drawImage) = 0;
+        virtual void draw(Image& drawImage, uint64_t deltaTime) = 0;
         virtual void onOpen()   = 0;
         virtual void onClose()  = 0;
         // ---------------------------------- //
