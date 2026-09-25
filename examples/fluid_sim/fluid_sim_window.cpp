@@ -277,6 +277,7 @@ void FluidSimWindow::draw(Image& drawImage, uint64_t deltaTime) {
     ImGui::InputInt("Iterations", &iterations);
     ImGui::InputFloat("Over relaxation", &controls.overRelaxation);
     ImGui::InputFloat("Smoke diffusion", &controls.smokeDiffuse);
+    ImGui::InputFloat("Density", &controls.density);
     ImGui::Checkbox("Open edges", (bool*)&controls.openEdges);
     if (ImGui::Button("clear")) {
         shouldClear = true;
