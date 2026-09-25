@@ -1,18 +1,14 @@
 # EngineZ
 
 ![Vulkan](https://img.shields.io/badge/Vulkan-red?logo=vulkan&logoColor=white)
-![C++](https://img.shields.io/badge/C%2B%2B-17-blue?logo=cplusplus)
+![C++](https://img.shields.io/badge/C%2B%2B-23-blue?logo=cplusplus)
 ![HLSL](https://img.shields.io/badge/shaders-HLSL-9146FF)
 
 A work-in-progress graphics engine built with Vulkan. Built for personal learning.
 
----
-
 ## Features
 
 Currently, it only has a simple windowing API. ImGui is integrated into the windows, and UI can be built directly in the `render` method of `ezWindow`. I'm not yet sure which direction I'll take the engine, but it's enough for my current use.
-
----
 
 ## Examples
 
@@ -31,21 +27,27 @@ Each of these steps is translated into a compute kernel written in HLSL. Kernels
 
 For scene building, there are a few cell types: velocity cells with constant velocity, pressure cells with constant pressure, and smoke cells with constant smoke color. Fun simulations can be built with these building blocks. for example, a wind tunnel:
 
-<figure align="center">
-  <img src="examples/fluid_sim/Images/windTunnelSmoke.png" width="400">
-  <img src="examples/fluid_sim/Images/windTunnelSpeed.png" width="400">
-  <figcaption align="center">Simple wind tunnel</figcaption>
-</figure>
+<table align="center">
+  <tr>
+    <td><img src="examples/fluid_sim/Images/windTunnelSmoke.png" width="400"></td>
+    <td><img src="examples/fluid_sim/Images/windTunnelSpeed.png" width="400"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><sub>Simple wind tunnel</sub></td>
+  </tr>
+</table>
 
 or some pipes to play with velocities:
 
-<figure align="center">
-  <img src="examples/fluid_sim/Images/pipesSmoke.png" width="400">
-  <img src="examples/fluid_sim/Images/pipesSpeed.png" width="400">
-  <figcaption align="center">Pipes</figcaption>
-</figure>
-
----
+<table align="center">
+  <tr>
+    <td><img src="examples/fluid_sim/Images/pipesSmoke.png" width="400"></td>
+    <td><img src="examples/fluid_sim/Images/pipesSpeed.png" width="400"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><sub>Pipes</sub></td>
+  </tr>
+</table>
 
 ## How To Build
 
