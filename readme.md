@@ -4,7 +4,7 @@
 ![C++](https://img.shields.io/badge/C%2B%2B-23-blue?logo=cplusplus)
 ![HLSL](https://img.shields.io/badge/shaders-HLSL-9146FF)
 
-A work-in-progress graphics engine built with Vulkan. Built for personal learning.
+A work-in-progress graphics engine with Vulkan. Built for personal learning.
 
 ## Features
 
@@ -16,7 +16,7 @@ Since maintaining separate projects for testing the engine was impractical, some
 
 ### Fluid Sim
 
-A simple grid-based fluid simulation, made to learn compute shaders. Based on these [course notes](https://www.cs.ubc.ca/~rbridson/fluidsimulation/fluids_notes.pdf) and Sebastian Lague's [video](https://youtu.be/Q78wvrQ9xsU?si=qZTFRF1NOh-2jKjj). The solver consists of four main steps:
+A simple grid-based fluid simulation, made to learn compute shaders. Based on this [course notes](https://www.cs.ubc.ca/~rbridson/fluidsimulation/fluids_notes.pdf) and Sebastian Lague's [video](https://youtu.be/Q78wvrQ9xsU?si=qZTFRF1NOh-2jKjj). The solver consists of four main steps:
 
 - **Advection**: Semi-Lagrangian method is used. Custom sampling functions are used for now. may switch to Vulkan samplers in the future.
 - **Diffusion**: Smoke is diffused.
